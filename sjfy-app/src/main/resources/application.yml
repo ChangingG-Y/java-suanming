@@ -16,7 +16,7 @@ logging:
 
 suanming:
   cors:
-    allowed-origin-patterns: "http://110.40.132.172,https://suanming-koteclin.cn,http://localhost:*,http://127.0.0.1:*"
+    allowed-origin-patterns: "http://110.40.132.172,https://suanming.koteclin.cn,http://localhost:*,http://127.0.0.1:*"
   ai:
     username: "${SUANMING_AUTH_USERNAME:小新}"
     password: "${SUANMING_AUTH_PASSWORD:}"
