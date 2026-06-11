@@ -1,0 +1,42 @@
+server:
+  port: ${SUANMING_PORT:8092}
+  servlet:
+    context-path: /api
+
+spring:
+  profiles:
+    active: test
+  mvc:
+    throw-exception-if-no-handler-found: true
+
+logging:
+  level:
+    root: info
+    cn.chinacici: debug
+
+suanming:
+  ai:
+    username: "${SUANMING_AUTH_USERNAME:小新}"
+    password: "${SUANMING_AUTH_PASSWORD:}"
+    token-ttl-seconds: 86400
+    deepseek-base-url: "${DEEPSEEK_BASE_URL:https://api.deepseek.com}"
+    deepseek-api-key: "${DEEPSEEK_API_KEY:}"
+    model: "${DEEPSEEK_MODEL:deepseek-v4-pro}"
+    allowed-models:
+      - deepseek-v4-pro
+      - deepseek-v4-flash
+    thinking-enabled: true
+    reasoning-effort: high
+    connect-timeout-ms: 10000
+    read-timeout-ms: 120000
+    max-tokens: 4096
+    system-prompt: |
+      你是一个专业、克制、结构清晰的八字命理分析助手。
+      用户已经在前端完成排盘，后端会把完整八字上下文随问题一起给你。你不要要求用户重复输入出生年月日时。
+
+      回答规则：
+      1. 先基于四柱、日主、月令、十神、藏干、旺衰、大运流年做命理判断。
+      2. 再针对用户问题给出具体分析，优先引用排盘中的字段作为依据。
+      3. 表达要清晰直接，但不要恐吓、绝对化或宣称必然发生。
+      4. 对不确定的地方要说明“倾向”“可能”“需要结合现实选择”。
+      5. 回答使用中文，结构建议为：整体判断、关键依据、当前阶段、大运流年、可执行建议。

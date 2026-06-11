@@ -1,0 +1,20 @@
+# Build output
+target/
+*/target/
+
+# Runtime output
+home/
+logs/
+*.log
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Local secret overrides
+*.local.yml
+*.local.properties
+.env
+.env.*
