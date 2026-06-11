@@ -21,7 +21,7 @@ java -jar sjfy-app/target/sjfy-app-1.0-SNAPSHOT.jar
 Default API base:
 
 ```text
-http://localhost:8092/api
+http://localhost:8093/api
 ```
 
 ## Main APIs
@@ -45,5 +45,5 @@ export SUANMING_AUTH_USERNAME='小新'
 export SUANMING_AUTH_PASSWORD='your-login-password'
 export DEEPSEEK_API_KEY='your-deepseek-api-key'
 export DEEPSEEK_MODEL='deepseek-v4-pro'
-export SUANMING_PORT=8092
+export SUANMING_PORT=8093
 ```

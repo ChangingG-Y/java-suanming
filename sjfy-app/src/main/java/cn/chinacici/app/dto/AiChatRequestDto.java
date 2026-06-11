@@ -15,6 +15,7 @@ public class AiChatRequestDto {
     private String model;
     private Boolean thinkingEnabled;
     private String reasoningEffort;
+    private String systemPrompt;
 
     public String getQuestion() {
         return question;
@@ -62,5 +63,13 @@ public class AiChatRequestDto {
 
     public void setReasoningEffort(String reasoningEffort) {
         this.reasoningEffort = reasoningEffort;
+    }
+
+    public String getSystemPrompt() {
+        return systemPrompt;
+    }
+
+    public void setSystemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt;
     }
 }

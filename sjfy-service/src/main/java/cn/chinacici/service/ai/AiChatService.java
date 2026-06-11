@@ -36,6 +36,7 @@ public class AiChatService {
     private static final Logger log = LoggerFactory.getLogger(AiChatService.class);
     private static final int MAX_HISTORY_MESSAGES = 10;
     private static final int MAX_QUESTION_LENGTH = 2000;
+    private static final int MAX_SYSTEM_PROMPT_LENGTH = 12000;
 
     private final SuanmingAiProperties properties;
     private final ObjectMapper objectMapper;
@@ -60,7 +61,8 @@ public class AiChatService {
                              List<AiHistoryMessage> history,
                              String requestedModel,
                              Boolean requestedThinkingEnabled,
-                             String requestedReasoningEffort) {
+                             String requestedReasoningEffort,
+                             String requestedSystemPrompt) {
         if (!StringUtils.hasText(question)) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "请输入想问 AI 的问题");
         }
@@ -77,8 +79,9 @@ public class AiChatService {
         String model = resolveModel(requestedModel);
         boolean thinkingEnabled = requestedThinkingEnabled == null ? properties.isThinkingEnabled() : requestedThinkingEnabled;
         String reasoningEffort = resolveReasoningEffort(requestedReasoningEffort);
+        String systemPrompt = resolveSystemPrompt(requestedSystemPrompt);
 
-        Map<String, Object> requestBody = buildDeepSeekRequest(question, baziContext, history, model, thinkingEnabled, reasoningEffort);
+        Map<String, Object> requestBody = buildDeepSeekRequest(question, baziContext, history, model, thinkingEnabled, reasoningEffort, systemPrompt);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(properties.getDeepseekApiKey());
@@ -101,9 +104,10 @@ public class AiChatService {
                                                      List<AiHistoryMessage> history,
                                                      String model,
                                                      boolean thinkingEnabled,
-                                                     String reasoningEffort) {
+                                                     String reasoningEffort,
+                                                     String systemPrompt) {
         List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(message("system", properties.getSystemPrompt()));
+        messages.add(message("system", systemPrompt));
 
         if (!CollectionUtils.isEmpty(history)) {
             int fromIndex = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
@@ -215,6 +219,19 @@ public class AiChatService {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "不支持的思考强度：" + effort);
         }
         return effort;
+    }
+
+    private String resolveSystemPrompt(String requestedSystemPrompt) {
+        String systemPrompt = StringUtils.hasText(requestedSystemPrompt)
+                ? requestedSystemPrompt.trim()
+                : properties.getSystemPrompt();
+        if (!StringUtils.hasText(systemPrompt)) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "角色提示词不能为空");
+        }
+        if (systemPrompt.length() > MAX_SYSTEM_PROMPT_LENGTH) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "角色提示词太长，请精简后再发送");
+        }
+        return systemPrompt;
     }
 
     private RestTemplate createRestTemplate(SuanmingAiProperties properties) {

@@ -1,5 +1,5 @@
 server:
-  port: ${SUANMING_PORT:8092}
+  port: ${SUANMING_PORT:8093}
   servlet:
     context-path: /api
 
@@ -15,17 +15,19 @@ logging:
     cn.chinacici: debug
 
 suanming:
+  cors:
+    allowed-origin-patterns: "http://110.40.132.172,https://suanming-koteclin.cn,http://localhost:*,http://127.0.0.1:*"
   ai:
     username: "${SUANMING_AUTH_USERNAME:小新}"
     password: "${SUANMING_AUTH_PASSWORD:}"
     token-ttl-seconds: 86400
     deepseek-base-url: "${DEEPSEEK_BASE_URL:https://api.deepseek.com}"
     deepseek-api-key: "${DEEPSEEK_API_KEY:}"
-    model: "${DEEPSEEK_MODEL:deepseek-v4-pro}"
+    model: "${DEEPSEEK_MODEL:deepseek-v4-flash}"
     allowed-models:
       - deepseek-v4-pro
       - deepseek-v4-flash
-    thinking-enabled: true
+    thinking-enabled: false
     reasoning-effort: high
     connect-timeout-ms: 10000
     read-timeout-ms: 120000

@@ -45,7 +45,8 @@ public class AiController {
                 requestDto.getHistory(),
                 requestDto.getModel(),
                 requestDto.getThinkingEnabled(),
-                requestDto.getReasoningEffort()
+                requestDto.getReasoningEffort(),
+                requestDto.getSystemPrompt()
         );
         return ResponseData.success(result);
     }
