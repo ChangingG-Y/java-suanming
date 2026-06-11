@@ -28,7 +28,7 @@ import java.util.Map;
 /**
  * 八字 AI 问答服务。
  *
- * <p>服务层统一拼接命理系统提示词、完整八字上下文和用户问题，然后调用 DeepSeek V4。
+ * <p>服务层统一拼接命理系统提示词、完整八字上下文和用户问题，然后调用配置的模型供应商。
  * 前端只负责收集排盘结果，不直接持有任何模型密钥。</p>
  */
 @Service
@@ -49,7 +49,7 @@ public class AiChatService {
     }
 
     /**
-     * 调用 DeepSeek 完成一次八字问答。
+     * 调用大模型完成一次八字问答。
      *
      * @param question 用户当前问题
      * @param baziContext 前端计算出的完整八字上下文
@@ -59,6 +59,7 @@ public class AiChatService {
     public AiChatResult chat(String question,
                              Object baziContext,
                              List<AiHistoryMessage> history,
+                             String requestedProvider,
                              String requestedModel,
                              Boolean requestedThinkingEnabled,
                              String requestedReasoningEffort,
@@ -72,40 +73,36 @@ public class AiChatService {
         if (baziContext == null) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "缺少八字排盘上下文，请先完成排盘");
         }
-        if (!StringUtils.hasText(properties.getDeepseekApiKey())) {
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek API Key 未配置");
-        }
-
-        String model = resolveModel(requestedModel);
+        ResolvedModel resolvedModel = resolveModel(requestedProvider, requestedModel);
         boolean thinkingEnabled = requestedThinkingEnabled == null ? properties.isThinkingEnabled() : requestedThinkingEnabled;
         String reasoningEffort = resolveReasoningEffort(requestedReasoningEffort);
         String systemPrompt = resolveSystemPrompt(requestedSystemPrompt);
 
-        Map<String, Object> requestBody = buildDeepSeekRequest(question, baziContext, history, model, thinkingEnabled, reasoningEffort, systemPrompt);
+        Map<String, Object> requestBody = buildChatRequest(question, baziContext, history, resolvedModel, thinkingEnabled, reasoningEffort, systemPrompt);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(properties.getDeepseekApiKey());
+        headers.setBearerAuth(resolvedModel.apiKey);
 
         try {
-            String url = trimTrailingSlash(properties.getDeepseekBaseUrl()) + "/chat/completions";
+            String url = trimTrailingSlash(resolvedModel.baseUrl) + "/chat/completions";
             ResponseEntity<Map> response = restTemplate.postForEntity(url, new HttpEntity<>(requestBody, headers), Map.class);
-            return parseDeepSeekResponse(response.getBody());
+            return parseChatResponse(response.getBody(), resolvedModel);
         } catch (HttpStatusCodeException e) {
-            log.warn("DeepSeek 调用失败，status={}, body={}", e.getRawStatusCode(), e.getResponseBodyAsString());
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 调用失败：" + summarizeError(e.getResponseBodyAsString()));
+            log.warn("{} 调用失败，status={}, body={}", resolvedModel.displayName, e.getRawStatusCode(), e.getResponseBodyAsString());
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, resolvedModel.displayName + " 调用失败：" + summarizeError(e.getResponseBodyAsString()));
         } catch (Exception e) {
-            log.error("DeepSeek 调用异常", e);
+            log.error("{} 调用异常", resolvedModel.displayName, e);
             throw new ServiceException(ResultCode.UNKNOWN_ERROR, "AI 服务暂时不可用，请稍后重试");
         }
     }
 
-    private Map<String, Object> buildDeepSeekRequest(String question,
-                                                     Object baziContext,
-                                                     List<AiHistoryMessage> history,
-                                                     String model,
-                                                     boolean thinkingEnabled,
-                                                     String reasoningEffort,
-                                                     String systemPrompt) {
+    private Map<String, Object> buildChatRequest(String question,
+                                                 Object baziContext,
+                                                 List<AiHistoryMessage> history,
+                                                 ResolvedModel resolvedModel,
+                                                 boolean thinkingEnabled,
+                                                 String reasoningEffort,
+                                                 String systemPrompt) {
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(message("system", systemPrompt));
 
@@ -129,10 +126,10 @@ public class AiChatService {
         thinking.put("type", thinkingEnabled ? "enabled" : "disabled");
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", model);
+        requestBody.put("model", resolvedModel.model);
         requestBody.put("messages", messages);
         requestBody.put("thinking", thinking);
-        if (thinkingEnabled) {
+        if (thinkingEnabled && "deepseek".equals(resolvedModel.provider)) {
             requestBody.put("reasoning_effort", reasoningEffort);
         }
         requestBody.put("stream", false);
@@ -150,26 +147,26 @@ public class AiChatService {
         }
     }
 
-    private AiChatResult parseDeepSeekResponse(Map<String, Object> responseBody) {
+    private AiChatResult parseChatResponse(Map<String, Object> responseBody, ResolvedModel resolvedModel) {
         if (responseBody == null) {
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 返回为空");
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, resolvedModel.displayName + " 返回为空");
         }
         Object choicesObj = responseBody.get("choices");
         if (!(choicesObj instanceof List) || ((List<?>) choicesObj).isEmpty()) {
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 未返回可用回答");
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, resolvedModel.displayName + " 未返回可用回答");
         }
         Object firstChoice = ((List<?>) choicesObj).get(0);
         if (!(firstChoice instanceof Map)) {
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 返回格式异常");
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, resolvedModel.displayName + " 返回格式异常");
         }
         Object messageObj = ((Map<?, ?>) firstChoice).get("message");
         if (!(messageObj instanceof Map)) {
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 返回消息格式异常");
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, resolvedModel.displayName + " 返回消息格式异常");
         }
         Object content = ((Map<?, ?>) messageObj).get("content");
         String answer = content == null ? "" : String.valueOf(content).trim();
         if (!StringUtils.hasText(answer)) {
-            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 返回内容为空");
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, resolvedModel.displayName + " 返回内容为空");
         }
 
         Map<String, Object> usage = null;
@@ -177,7 +174,7 @@ public class AiChatService {
         if (usageObj instanceof Map) {
             usage = (Map<String, Object>) usageObj;
         }
-        return new AiChatResult(answer, String.valueOf(responseBody.getOrDefault("model", properties.getModel())), usage);
+        return new AiChatResult(answer, String.valueOf(responseBody.getOrDefault("model", resolvedModel.model)), usage);
     }
 
     private Map<String, String> message(String role, String content) {
@@ -194,15 +191,60 @@ public class AiChatService {
         return null;
     }
 
-    private String resolveModel(String requestedModel) {
+    private ResolvedModel resolveModel(String requestedProvider, String requestedModel) {
+        String provider = StringUtils.hasText(requestedProvider) ? requestedProvider.trim() : properties.getProvider();
         String model = StringUtils.hasText(requestedModel) ? requestedModel.trim() : properties.getModel();
+
+        if (model.contains(":")) {
+            String[] parts = model.split(":", 2);
+            provider = parts[0];
+            model = parts[1];
+        }
+        if (model.contains("/")) {
+            String[] parts = model.split("/", 2);
+            provider = parts[0];
+            model = parts[1];
+        }
+
+        if (!StringUtils.hasText(provider)) {
+            provider = "deepseek";
+        }
+        if (!StringUtils.hasText(model)) {
+            model = "deepseek-v4-flash";
+        }
+
+        if (!CollectionUtils.isEmpty(properties.getAllowedProviders()) && !properties.getAllowedProviders().contains(provider)) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "不支持的模型供应商：" + provider);
+        }
         if (CollectionUtils.isEmpty(properties.getAllowedModels())) {
-            return model;
+            return buildResolvedModel(provider, model);
         }
         if (!properties.getAllowedModels().contains(model)) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "不支持的模型：" + model);
         }
-        return model;
+        return buildResolvedModel(provider, model);
+    }
+
+    private ResolvedModel buildResolvedModel(String provider, String model) {
+        if ("deepseek".equals(provider)) {
+            if (!model.startsWith("deepseek-")) {
+                throw new ServiceException(ResultCode.PARAMETER_ERROR, "DeepSeek 供应商不能使用模型：" + model);
+            }
+            if (!StringUtils.hasText(properties.getDeepseekApiKey())) {
+                throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek API Key 未配置");
+            }
+            return new ResolvedModel(provider, model, trimTrailingSlash(properties.getDeepseekBaseUrl()), properties.getDeepseekApiKey(), "DeepSeek");
+        }
+        if ("doubao".equals(provider)) {
+            if (!model.startsWith("doubao-")) {
+                throw new ServiceException(ResultCode.PARAMETER_ERROR, "豆包供应商不能使用模型：" + model);
+            }
+            if (!StringUtils.hasText(properties.getVolcengineApiKey())) {
+                throw new ServiceException(ResultCode.UNKNOWN_ERROR, "火山方舟 API Key 未配置");
+            }
+            return new ResolvedModel(provider, model, trimTrailingSlash(properties.getVolcengineBaseUrl()), properties.getVolcengineApiKey(), "火山方舟");
+        }
+        throw new ServiceException(ResultCode.PARAMETER_ERROR, "不支持的模型供应商：" + provider);
     }
 
     private String resolveReasoningEffort(String requestedReasoningEffort) {
@@ -243,7 +285,7 @@ public class AiChatService {
 
     private String trimTrailingSlash(String value) {
         if (!StringUtils.hasText(value)) {
-            return "https://api.deepseek.com";
+            return "";
         }
         return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
     }
@@ -253,5 +295,21 @@ public class AiChatService {
             return "接口无响应内容";
         }
         return errorBody.length() > 240 ? errorBody.substring(0, 240) + "..." : errorBody;
+    }
+
+    private static class ResolvedModel {
+        private final String provider;
+        private final String model;
+        private final String baseUrl;
+        private final String apiKey;
+        private final String displayName;
+
+        private ResolvedModel(String provider, String model, String baseUrl, String apiKey, String displayName) {
+            this.provider = provider;
+            this.model = model;
+            this.baseUrl = baseUrl;
+            this.apiKey = apiKey;
+            this.displayName = displayName;
+        }
     }
 }

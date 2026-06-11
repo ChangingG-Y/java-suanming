@@ -17,10 +17,20 @@ public class SuanmingAiProperties {
     private String username;
     private String password;
     private long tokenTtlSeconds = 86400L;
+    private String provider = "deepseek";
     private String deepseekBaseUrl;
     private String deepseekApiKey;
+    private String volcengineBaseUrl;
+    private String volcengineApiKey;
     private String model;
-    private List<String> allowedModels = Arrays.asList("deepseek-v4-pro", "deepseek-v4-flash");
+    private List<String> allowedProviders = Arrays.asList("deepseek", "doubao");
+    private List<String> allowedModels = Arrays.asList(
+            "deepseek-v4-pro",
+            "deepseek-v4-flash",
+            "doubao-seed-2-0-mini-260428",
+            "doubao-seed-2-0-pro-260215",
+            "doubao-seed-2-0-lite-260428"
+    );
     private boolean thinkingEnabled = true;
     private String reasoningEffort = "high";
     private int connectTimeoutMs = 10000;
@@ -52,6 +62,14 @@ public class SuanmingAiProperties {
         this.tokenTtlSeconds = tokenTtlSeconds;
     }
 
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
+    }
+
     public String getDeepseekBaseUrl() {
         return deepseekBaseUrl;
     }
@@ -68,12 +86,36 @@ public class SuanmingAiProperties {
         this.deepseekApiKey = deepseekApiKey;
     }
 
+    public String getVolcengineBaseUrl() {
+        return volcengineBaseUrl;
+    }
+
+    public void setVolcengineBaseUrl(String volcengineBaseUrl) {
+        this.volcengineBaseUrl = volcengineBaseUrl;
+    }
+
+    public String getVolcengineApiKey() {
+        return volcengineApiKey;
+    }
+
+    public void setVolcengineApiKey(String volcengineApiKey) {
+        this.volcengineApiKey = volcengineApiKey;
+    }
+
     public String getModel() {
         return model;
     }
 
     public void setModel(String model) {
         this.model = model;
+    }
+
+    public List<String> getAllowedProviders() {
+        return allowedProviders;
+    }
+
+    public void setAllowedProviders(List<String> allowedProviders) {
+        this.allowedProviders = allowedProviders;
     }
 
     public List<String> getAllowedModels() {

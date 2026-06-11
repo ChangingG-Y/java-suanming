@@ -43,6 +43,7 @@ public class AiController {
                 requestDto.getQuestion(),
                 requestDto.getBaziContext(),
                 requestDto.getHistory(),
+                requestDto.getProvider(),
                 requestDto.getModel(),
                 requestDto.getThinkingEnabled(),
                 requestDto.getReasoningEffort(),

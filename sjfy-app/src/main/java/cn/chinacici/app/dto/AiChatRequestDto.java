@@ -12,6 +12,7 @@ public class AiChatRequestDto {
     private String question;
     private Map<String, Object> baziContext;
     private List<AiHistoryMessage> history;
+    private String provider;
     private String model;
     private Boolean thinkingEnabled;
     private String reasoningEffort;
@@ -39,6 +40,14 @@ public class AiChatRequestDto {
 
     public void setHistory(List<AiHistoryMessage> history) {
         this.history = history;
+    }
+
+    public String getProvider() {
+        return provider;
+    }
+
+    public void setProvider(String provider) {
+        this.provider = provider;
     }
 
     public String getModel() {

@@ -21,12 +21,21 @@ suanming:
     username: "${SUANMING_AUTH_USERNAME:小新}"
     password: "${SUANMING_AUTH_PASSWORD:}"
     token-ttl-seconds: 86400
+    provider: "${AI_PROVIDER:deepseek}"
     deepseek-base-url: "${DEEPSEEK_BASE_URL:https://api.deepseek.com}"
     deepseek-api-key: "${DEEPSEEK_API_KEY:}"
-    model: "${DEEPSEEK_MODEL:deepseek-v4-flash}"
+    volcengine-base-url: "${ARK_BASE_URL:https://ark.cn-beijing.volces.com/api/v3}"
+    volcengine-api-key: "${ARK_API_KEY:${VOLCENGINE_API_KEY:}}"
+    model: "${AI_MODEL:${DEEPSEEK_MODEL:deepseek-v4-flash}}"
+    allowed-providers:
+      - deepseek
+      - doubao
     allowed-models:
       - deepseek-v4-pro
       - deepseek-v4-flash
+      - doubao-seed-2-0-mini-260428
+      - doubao-seed-2-0-pro-260215
+      - doubao-seed-2-0-lite-260428
     thinking-enabled: false
     reasoning-effort: high
     connect-timeout-ms: 10000
