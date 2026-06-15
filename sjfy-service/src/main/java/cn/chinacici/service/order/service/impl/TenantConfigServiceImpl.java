@@ -87,6 +87,7 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         dto.setTab2Icon(m.getOrDefault("layout.tab.2.icon", "📖"));
         dto.setTab2Label(m.getOrDefault("layout.tab.2.label", "历史"));
         dto.setAdminTitle(m.getOrDefault("layout.admin.title", "管理后台"));
+        dto.setSuccessMsg(m.getOrDefault("layout.order.success_msg", "下单成功！等待接单 🍳"));
         return dto;
     }
 
@@ -102,7 +103,8 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         if (dto.getTab1Label() != null)   setConfig(tenantId, "layout.tab.1.label",  dto.getTab1Label());
         if (dto.getTab2Icon() != null)    setConfig(tenantId, "layout.tab.2.icon",   dto.getTab2Icon());
         if (dto.getTab2Label() != null)   setConfig(tenantId, "layout.tab.2.label",  dto.getTab2Label());
-        if (dto.getAdminTitle() != null)  setConfig(tenantId, "layout.admin.title",  dto.getAdminTitle());
+        if (dto.getAdminTitle() != null)  setConfig(tenantId, "layout.admin.title",       dto.getAdminTitle());
+        if (dto.getSuccessMsg() != null)  setConfig(tenantId, "layout.order.success_msg",  dto.getSuccessMsg());
     }
 
     @Override

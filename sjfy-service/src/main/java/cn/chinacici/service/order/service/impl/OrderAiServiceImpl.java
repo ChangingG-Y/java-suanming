@@ -1,5 +1,7 @@
 package cn.chinacici.service.order.service.impl;
 
+import cn.chinacici.core.ResultCode;
+import cn.chinacici.exception.ServiceException;
 import cn.chinacici.service.ai.config.SuanmingAiProperties;
 import cn.chinacici.service.order.dto.CalorieAdviceReqDto;
 import cn.chinacici.service.order.dto.CalorieAdviceRespDto;
@@ -81,7 +83,7 @@ public class OrderAiServiceImpl implements OrderAiService {
 
         if (!StringUtils.hasText(apiKey)) {
             log.warn("点餐AI热量分析：{} API Key 未配置（租户{}）", provider, tid);
-            return new CalorieAdviceRespDto("AI 服务暂未配置，无法获取热量分析", true);
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "AI API Key 未配置，请在管理后台 AI配置 中填写");
         }
 
         try {

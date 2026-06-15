@@ -12,6 +12,7 @@ public class LayoutConfigDto {
     private String tab2Icon;
     private String tab2Label;
     private String adminTitle;
+    private String successMsg;
 
     public String getLoginEmoji() { return loginEmoji; }
     public void setLoginEmoji(String loginEmoji) { this.loginEmoji = loginEmoji; }
@@ -35,4 +36,6 @@ public class LayoutConfigDto {
     public void setTab2Label(String tab2Label) { this.tab2Label = tab2Label; }
     public String getAdminTitle() { return adminTitle; }
     public void setAdminTitle(String adminTitle) { this.adminTitle = adminTitle; }
+    public String getSuccessMsg() { return successMsg; }
+    public void setSuccessMsg(String successMsg) { this.successMsg = successMsg; }
 }
