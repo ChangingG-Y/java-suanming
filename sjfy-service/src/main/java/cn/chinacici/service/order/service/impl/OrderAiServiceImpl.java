@@ -95,7 +95,8 @@ public class OrderAiServiceImpl implements OrderAiService {
             body.put("model", model);
             body.put("messages", messages);
             body.put("stream", false);
-            body.put("max_tokens", 200);  // 严格限制输出长度
+            // 不设 max_tokens：让 prompt 里"80字以内"控制长度
+            // DeepSeek 思考类模型设置 max_tokens 会截断 reasoning_content，导致 content 为空
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -114,16 +115,30 @@ public class OrderAiServiceImpl implements OrderAiService {
 
     @SuppressWarnings("unchecked")
     private String extractContent(Map<String, Object> responseBody) {
-        if (responseBody == null) return "AI 返回为空";
+        if (responseBody == null) return null;
         Object choices = responseBody.get("choices");
-        if (!(choices instanceof List) || ((List<?>) choices).isEmpty()) return "AI 返回格式异常";
+        if (!(choices instanceof List) || ((List<?>) choices).isEmpty()) return null;
         Object first = ((List<?>) choices).get(0);
-        if (!(first instanceof Map)) return "AI 返回格式异常";
+        if (!(first instanceof Map)) return null;
         Object message = ((Map<?, ?>) first).get("message");
-        if (!(message instanceof Map)) return "AI 返回格式异常";
-        Object content = ((Map<?, ?>) message).get("content");
-        String text = content == null ? "" : String.valueOf(content).trim();
-        // 限制最大长度防止 AI 超出要求
-        return text.length() > 200 ? text.substring(0, 200) : text;
+        if (!(message instanceof Map)) return null;
+        Map<?, ?> msgMap = (Map<?, ?>) message;
+
+        // 优先取 content；DeepSeek 思考类模型 content 可能为 null，fallback 到 reasoning_content
+        String content = toNonEmptyString(msgMap.get("content"));
+        if (content != null) {
+            return content.length() > 200 ? content.substring(0, 200) : content;
+        }
+        String reasoning = toNonEmptyString(msgMap.get("reasoning_content"));
+        if (reasoning != null) {
+            return reasoning.length() > 200 ? reasoning.substring(0, 200) : reasoning;
+        }
+        return null;
+    }
+
+    private String toNonEmptyString(Object obj) {
+        if (obj == null) return null;
+        String s = String.valueOf(obj).trim();
+        return s.isEmpty() || "null".equals(s) ? null : s;
     }
 }
