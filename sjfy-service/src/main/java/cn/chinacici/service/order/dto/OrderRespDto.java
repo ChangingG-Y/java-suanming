@@ -21,7 +21,7 @@ public class OrderRespDto {
     // 变更3/5：总亲亲数
     private Integer totalKiss;
     // 变更5/6：评价分数（有评价时填score，无则null）
-    private Integer reviewScore;
+    private Double reviewScore;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -71,6 +71,6 @@ public class OrderRespDto {
     public Integer getTotalKiss() { return totalKiss; }
     public void setTotalKiss(Integer totalKiss) { this.totalKiss = totalKiss; }
 
-    public Integer getReviewScore() { return reviewScore; }
-    public void setReviewScore(Integer reviewScore) { this.reviewScore = reviewScore; }
+    public Double getReviewScore() { return reviewScore; }
+    public void setReviewScore(Double reviewScore) { this.reviewScore = reviewScore; }
 }

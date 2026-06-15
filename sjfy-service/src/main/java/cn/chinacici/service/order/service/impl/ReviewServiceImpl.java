@@ -42,9 +42,13 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public ReviewRespDto createReview(CreateReviewReqDto dto, Integer userId) {
-        // 验证 score 范围
-        if (dto.getScore() == null || dto.getScore() < 1 || dto.getScore() > 10) {
-            throw new ServiceException(ResultCode.PARAMETER_ERROR, "评分范围为1-10");
+        // 验证 score 范围 (0.5-10，步进0.5)
+        if (dto.getScore() == null || dto.getScore() < 0.5 || dto.getScore() > 10.0) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "评分范围为0.5-10");
+        }
+        double doubledScore = dto.getScore() * 2;
+        if (Math.abs(doubledScore - Math.round(doubledScore)) > 0.000001) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "评分只支持0.5分步进");
         }
         // 验证 fileIds 最多3个
         if (dto.getFileIds() != null && dto.getFileIds().size() > 3) {
@@ -54,6 +58,9 @@ public class ReviewServiceImpl implements ReviewService {
         LoOrder order = orderMapper.selectById(dto.getOrderId());
         if (order == null || order.getIsDeleted() == 1) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "无权评价");
         }
         if (order.getState() != 3) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "订单未完成，无法评价");
@@ -94,7 +101,14 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    public ReviewRespDto getReviewByOrderId(Integer orderId) {
+    public ReviewRespDto getReviewByOrderId(Integer orderId, Integer userId) {
+        LoOrder order = orderMapper.selectById(orderId);
+        if (order == null || order.getIsDeleted() == 1) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "无权查看");
+        }
         LoReview review = reviewMapper.selectOne(
             new LambdaQueryWrapper<LoReview>()
                 .eq(LoReview::getOrderId, orderId)

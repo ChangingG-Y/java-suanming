@@ -11,7 +11,7 @@ public interface OrderService {
     MealTypeInfoDto getMealTypeInfo(Integer userId);
     OrderRespDto createOrder(CreateOrderReqDto dto, Integer userId);
     List<OrderRespDto> getMyOrders(Integer userId);
-    OrderRespDto getOrderById(Integer orderId);
+    OrderRespDto getOrderById(Integer orderId, Integer userId);
     void completeOrder(Integer orderId, Integer userId);
 
     // Admin

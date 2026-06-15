@@ -8,6 +8,7 @@ public class OrderItemDto {
     private Integer quantity;
     private Integer itemPrice;
     private String remark;
+    private Integer imageFileId;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -29,4 +30,7 @@ public class OrderItemDto {
 
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
+
+    public Integer getImageFileId() { return imageFileId; }
+    public void setImageFileId(Integer imageFileId) { this.imageFileId = imageFileId; }
 }

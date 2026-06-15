@@ -5,13 +5,17 @@ import cn.chinacici.exception.ServiceException;
 import cn.chinacici.service.order.dto.CartItemDto;
 import cn.chinacici.service.order.dto.CreateOrderReqDto;
 import cn.chinacici.service.order.dto.DayOrderSummaryDto;
+import cn.chinacici.service.order.dto.FileRespDto;
 import cn.chinacici.service.order.dto.MealTypeInfoDto;
 import cn.chinacici.service.order.dto.OrderItemDto;
 import cn.chinacici.service.order.dto.OrderRespDto;
+import cn.chinacici.service.order.dto.ReviewRespDto;
 import cn.chinacici.service.order.entity.LoDish;
+import cn.chinacici.service.order.entity.LoFile;
 import cn.chinacici.service.order.entity.LoOrder;
 import cn.chinacici.service.order.entity.LoOrderItem;
 import cn.chinacici.service.order.entity.LoReview;
+import cn.chinacici.service.order.entity.LoReviewImageRela;
 import cn.chinacici.service.order.mapper.LoDishMapper;
 import cn.chinacici.service.order.mapper.LoFileMapper;
 import cn.chinacici.service.order.mapper.LoOrderItemMapper;
@@ -73,18 +77,19 @@ public class OrderServiceImpl implements OrderService {
         dto.setMealType(mealType);
         dto.setMealTypeName(mealTypeName(mealType));
 
-        List<LoOrder> todayOrders = orderMapper.selectList(
+        // 只有晚饭且订单未出餐(state < 2)才能加菜（加菜会合并进原订单）
+        List<LoOrder> todayDinnerOrders = orderMapper.selectList(
             new LambdaQueryWrapper<LoOrder>()
                 .eq(LoOrder::getUserId, userId)
                 .eq(LoOrder::getOrderDate, today)
                 .eq(LoOrder::getMealType, 2)
                 .eq(LoOrder::getIsAddDish, 0)
-                .lt(LoOrder::getState, 3)
+                .lt(LoOrder::getState, 2)
                 .eq(LoOrder::getIsDeleted, 0)
         );
-        dto.setCanAddDish(!todayOrders.isEmpty() && mealType == 2);
-        if (!todayOrders.isEmpty()) {
-            dto.setTodayDinnerOrderId(todayOrders.get(0).getId());
+        dto.setCanAddDish(!todayDinnerOrders.isEmpty() && mealType == 2);
+        if (!todayDinnerOrders.isEmpty()) {
+            dto.setTodayDinnerOrderId(todayDinnerOrders.get(0).getId());
         }
         return dto;
     }
@@ -96,13 +101,35 @@ public class OrderServiceImpl implements OrderService {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "请至少选择一道菜");
         }
 
+        int targetMealType = dto.getMealType() != null ? dto.getMealType() : calcMealType();
+        LocalDate targetDate = parseMealDate(dto.getMealDate());
+        if (targetMealType < 0 || targetMealType > 2) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "餐次不正确");
+        }
+
+        // 前端显式带 parentOrderId 时优先按原单处理。原单已出餐则不再加菜，继续落成一笔新订单。
+        if (dto.getIsAddDish() != null && dto.getIsAddDish() == 1
+                && dto.getParentOrderId() != null && dto.getParentOrderId() > 0) {
+            LoOrder parent = orderMapper.selectById(dto.getParentOrderId());
+            if (canMergeAddDish(parent, userId)) {
+                return mergeAddDishToOrder(dto, parent);
+            }
+            if (parent != null && !parent.getUserId().equals(userId)) {
+                throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "无权操作");
+            }
+        }
+
+        // 同一用户、同一天、同一餐次如果还有未出餐订单，普通下单也合并进去，评价和详情都归在同一单。
+        LoOrder mergeTarget = findMergeableOrder(userId, targetDate, targetMealType);
+        if (mergeTarget != null) {
+            return mergeAddDishToOrder(dto, mergeTarget);
+        }
+
         String orderNo = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE)
             + System.currentTimeMillis() % 1000000;
 
-        LocalDate today = LocalDate.now();
         int now = (int)(System.currentTimeMillis() / 1000);
 
-        // 变更4：计算totalKiss = sum(itemPrice * quantity)
         int totalKiss = 0;
         for (CartItemDto item : dto.getItems()) {
             LoDish dish = dishMapper.selectById(item.getDishId());
@@ -114,14 +141,13 @@ public class OrderServiceImpl implements OrderService {
         LoOrder order = new LoOrder();
         order.setOrderNo(orderNo);
         order.setUserId(userId);
-        order.setOrderDate(today);
-        order.setMealType(dto.getMealType() != null ? dto.getMealType() : calcMealType());
-        order.setIsAddDish(dto.getIsAddDish() != null ? dto.getIsAddDish() : 0);
-        order.setParentOrderId(dto.getParentOrderId() != null ? dto.getParentOrderId() : 0);
+        order.setOrderDate(targetDate);
+        order.setMealType(targetMealType);
+        order.setIsAddDish(0);
+        order.setParentOrderId(0);
         order.setState(0);
         order.setRemark(dto.getRemark() != null ? dto.getRemark() : "");
         order.setIsVerified(1);
-        // 变更3：保存totalKiss
         order.setTotalKiss(totalKiss);
         order.setIsDeleted(0);
         order.setCreatedAt(now);
@@ -131,7 +157,6 @@ public class OrderServiceImpl implements OrderService {
         for (CartItemDto item : dto.getItems()) {
             LoDish dish = dishMapper.selectById(item.getDishId());
             String dishName = dish != null ? dish.getName() : (item.getDishName() != null ? item.getDishName() : "");
-            // 变更3：item_price 单价快照
             int price = (dish != null && dish.getPrice() != null) ? dish.getPrice() : 0;
             LoOrderItem oi = new LoOrderItem();
             oi.setOrderId(order.getId());
@@ -144,7 +169,74 @@ public class OrderServiceImpl implements OrderService {
             orderItemMapper.insert(oi);
         }
 
-        return getOrderById(order.getId());
+        return getOrderById(order.getId(), userId);
+    }
+
+    /** 加菜合并：将新菜品追加到原订单，更新 totalKiss，不创建新 order 记录。 */
+    private OrderRespDto mergeAddDishToOrder(CreateOrderReqDto dto, LoOrder parent) {
+        int now = (int)(System.currentTimeMillis() / 1000);
+        int addKiss = 0;
+
+        for (CartItemDto item : dto.getItems()) {
+            LoDish dish = dishMapper.selectById(item.getDishId());
+            String dishName = dish != null ? dish.getName() : (item.getDishName() != null ? item.getDishName() : "");
+            int price = (dish != null && dish.getPrice() != null) ? dish.getPrice() : 0;
+            int qty = item.getQuantity() != null ? item.getQuantity() : 1;
+            addKiss += price * qty;
+
+            LoOrderItem oi = new LoOrderItem();
+            oi.setOrderId(parent.getId());
+            oi.setDishId(item.getDishId());
+            oi.setDishName(dishName);
+            oi.setQuantity(qty);
+            oi.setRemark(item.getRemark() != null ? item.getRemark() : "");
+            oi.setItemPrice(price);
+            oi.setCreatedAt(now);
+            orderItemMapper.insert(oi);
+        }
+
+        int newTotal = (parent.getTotalKiss() != null ? parent.getTotalKiss() : 0) + addKiss;
+        orderMapper.update(null, new LambdaUpdateWrapper<LoOrder>()
+            .eq(LoOrder::getId, parent.getId())
+            .set(LoOrder::getTotalKiss, newTotal)
+            .set(LoOrder::getUpdatedAt, now));
+
+        return getOrderById(parent.getId(), parent.getUserId());
+    }
+
+    /** 解析前端餐次日期，未传或格式异常时使用今天，避免因为日期控件缺省导致下单失败。 */
+    private LocalDate parseMealDate(String mealDate) {
+        if (mealDate == null || mealDate.trim().isEmpty()) {
+            return LocalDate.now();
+        }
+        try {
+            return LocalDate.parse(mealDate.trim());
+        } catch (Exception e) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "点餐日期格式不正确");
+        }
+    }
+
+    /** 判断订单是否还能承接加菜：同一用户且未出餐。 */
+    private boolean canMergeAddDish(LoOrder order, Integer userId) {
+        return order != null
+            && order.getIsDeleted() != null && order.getIsDeleted() == 0
+            && order.getUserId() != null && order.getUserId().equals(userId)
+            && order.getState() != null && order.getState() < 2;
+    }
+
+    /** 查找同餐次未出餐主订单；找到后普通下单也合并，避免同餐次被拆成多笔评价。 */
+    private LoOrder findMergeableOrder(Integer userId, LocalDate orderDate, Integer mealType) {
+        List<LoOrder> orders = orderMapper.selectList(
+            new LambdaQueryWrapper<LoOrder>()
+                .eq(LoOrder::getUserId, userId)
+                .eq(LoOrder::getOrderDate, orderDate)
+                .eq(LoOrder::getMealType, mealType)
+                .eq(LoOrder::getIsAddDish, 0)
+                .lt(LoOrder::getState, 2)
+                .eq(LoOrder::getIsDeleted, 0)
+                .orderByDesc(LoOrder::getCreatedAt)
+        );
+        return orders.isEmpty() ? null : orders.get(0);
     }
 
     @Override
@@ -155,16 +247,19 @@ public class OrderServiceImpl implements OrderService {
                 .eq(LoOrder::getIsDeleted, 0)
                 .orderByDesc(LoOrder::getCreatedAt)
         );
-        return orders.stream().map(this::toOrderRespDto).collect(Collectors.toList());
+        return orders.stream().map(o -> toOrderRespDto(o, false)).collect(Collectors.toList());
     }
 
     @Override
-    public OrderRespDto getOrderById(Integer orderId) {
+    public OrderRespDto getOrderById(Integer orderId, Integer userId) {
         LoOrder order = orderMapper.selectById(orderId);
         if (order == null || order.getIsDeleted() == 1) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "订单不存在");
         }
-        return toOrderRespDto(order);
+        if (userId != null && !order.getUserId().equals(userId)) {
+            throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "无权查看");
+        }
+        return toOrderRespDto(order, true);
     }
 
     @Override
@@ -186,7 +281,7 @@ public class OrderServiceImpl implements OrderService {
             .eq(LoOrder::getIsDeleted, 0)
             .orderByDesc(LoOrder::getCreatedAt);
         if (state != null) qw.eq(LoOrder::getState, state);
-        return orderMapper.selectList(qw).stream().map(this::toOrderRespDto).collect(Collectors.toList());
+        return orderMapper.selectList(qw).stream().map(o -> toOrderRespDto(o, false)).collect(Collectors.toList());
     }
 
     @Override
@@ -199,9 +294,6 @@ public class OrderServiceImpl implements OrderService {
         changeState(orderId, 1, 2);
     }
 
-    /**
-     * 变更6：按天统计订单历史，按日期 desc 排序，每天聚合所有订单（含已完成和进行中），带 review 评分。
-     */
     @Override
     public List<DayOrderSummaryDto> getOrderHistory(Integer userId) {
         List<LoOrder> orders = orderMapper.selectList(
@@ -216,7 +308,7 @@ public class OrderServiceImpl implements OrderService {
         Map<String, List<OrderRespDto>> dateMap = new LinkedHashMap<>();
         for (LoOrder order : orders) {
             String dateKey = order.getOrderDate() != null ? order.getOrderDate().format(formatter) : "未知日期";
-            OrderRespDto dto = toOrderRespDto(order);
+            OrderRespDto dto = toOrderRespDto(order, false);
             dateMap.computeIfAbsent(dateKey, k -> new ArrayList<>()).add(dto);
         }
 
@@ -247,7 +339,10 @@ public class OrderServiceImpl implements OrderService {
             .set(LoOrder::getUpdatedAt, now));
     }
 
-    private OrderRespDto toOrderRespDto(LoOrder order) {
+    /**
+     * @param loadFullReview true=详情页：加载完整 review（含 images）；false=列表页：只带 reviewScore
+     */
+    private OrderRespDto toOrderRespDto(LoOrder order, boolean loadFullReview) {
         OrderRespDto dto = new OrderRespDto();
         dto.setId(order.getId());
         dto.setOrderNo(order.getOrderNo());
@@ -261,9 +356,9 @@ public class OrderServiceImpl implements OrderService {
         dto.setStateName(stateName(order.getState()));
         dto.setRemark(order.getRemark());
         dto.setCreatedAt(order.getCreatedAt());
-        // 变更3/5：totalKiss
         dto.setTotalKiss(order.getTotalKiss());
 
+        // 菜品列表：加载 imageFileId（从 lo_dish 取）
         List<LoOrderItem> items = orderItemMapper.selectList(
             new LambdaQueryWrapper<LoOrderItem>().eq(LoOrderItem::getOrderId, order.getId())
         );
@@ -273,13 +368,20 @@ public class OrderServiceImpl implements OrderService {
             itemDto.setDishId(i.getDishId());
             itemDto.setDishName(i.getDishName());
             itemDto.setQuantity(i.getQuantity());
-            // 变更5：带出 itemPrice
             itemDto.setItemPrice(i.getItemPrice());
+            itemDto.setRemark(i.getRemark());
+            // 从菜品表取图片 fileId（可能为 null）
+            if (i.getDishId() != null) {
+                LoDish dish = dishMapper.selectById(i.getDishId());
+                if (dish != null) {
+                    itemDto.setImageFileId(dish.getImageFileId());
+                }
+            }
             return itemDto;
         }).collect(Collectors.toList());
         dto.setItems(itemDtos);
 
-        // 变更5/6：查 review，同时取 score
+        // 评价
         LoReview review = reviewMapper.selectOne(
             new LambdaQueryWrapper<LoReview>()
                 .eq(LoReview::getOrderId, order.getId())
@@ -288,8 +390,43 @@ public class OrderServiceImpl implements OrderService {
         dto.setHasReview(review != null);
         if (review != null) {
             dto.setReviewScore(review.getScore());
+            if (loadFullReview) {
+                dto.setReview(buildReviewRespDto(review));
+            }
         }
 
+        return dto;
+    }
+
+    /** 构建完整评价 DTO，包含图片列表 */
+    private ReviewRespDto buildReviewRespDto(LoReview review) {
+        ReviewRespDto dto = new ReviewRespDto();
+        dto.setId(review.getId());
+        dto.setOrderId(review.getOrderId());
+        dto.setUserId(review.getUserId());
+        dto.setScore(review.getScore());
+        dto.setContent(review.getContent());
+        dto.setCreatedAt(review.getCreatedAt());
+
+        List<LoReviewImageRela> relas = reviewImageRelaMapper.selectList(
+            new LambdaQueryWrapper<LoReviewImageRela>()
+                .eq(LoReviewImageRela::getReviewId, review.getId())
+                .orderByAsc(LoReviewImageRela::getSeq)
+        );
+        List<FileRespDto> images = new ArrayList<>();
+        for (LoReviewImageRela rela : relas) {
+            LoFile loFile = fileMapper.selectById(rela.getFileId());
+            if (loFile != null) {
+                FileRespDto fileDto = new FileRespDto();
+                fileDto.setId(loFile.getId());
+                fileDto.setUrl("/api/order/file/" + loFile.getId());
+                fileDto.setThumbnailUrl("/api/order/file/" + loFile.getId() + "/thumbnail");
+                fileDto.setOriginalName(loFile.getOriginalName());
+                fileDto.setFileSize(loFile.getFileSize());
+                images.add(fileDto);
+            }
+        }
+        dto.setImages(images);
         return dto;
     }
 

@@ -57,8 +57,8 @@ public class CustomerOrderController {
         @PathVariable Integer id,
         @RequestHeader(value = "Authorization", required = false) String auth
     ) {
-        userOrderService.requireUserId(auth);
-        return ResponseData.success(orderService.getOrderById(id));
+        Integer userId = userOrderService.requireUserId(auth);
+        return ResponseData.success(orderService.getOrderById(id, userId));
     }
 
     /** POST /api/order/orders/{id}/complete - 完成吃饭（需要登录） */
@@ -88,8 +88,8 @@ public class CustomerOrderController {
         @PathVariable Integer orderId,
         @RequestHeader(value = "Authorization", required = false) String auth
     ) {
-        userOrderService.requireUserId(auth);
-        return ResponseData.success(reviewService.getReviewByOrderId(orderId));
+        Integer userId = userOrderService.requireUserId(auth);
+        return ResponseData.success(reviewService.getReviewByOrderId(orderId, userId));
     }
 
     /** GET /api/order/orders/history - 按天统计订单历史（变更6） */

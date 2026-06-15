@@ -4,6 +4,7 @@ import java.util.List;
 
 public class CreateOrderReqDto {
     private Integer mealType;
+    private String mealDate;
     private Integer isAddDish = 0;
     private Integer parentOrderId;
     private String remark;
@@ -12,6 +13,9 @@ public class CreateOrderReqDto {
 
     public Integer getMealType() { return mealType; }
     public void setMealType(Integer mealType) { this.mealType = mealType; }
+
+    public String getMealDate() { return mealDate; }
+    public void setMealDate(String mealDate) { this.mealDate = mealDate; }
 
     public Integer getIsAddDish() { return isAddDish; }
     public void setIsAddDish(Integer isAddDish) { this.isAddDish = isAddDish; }

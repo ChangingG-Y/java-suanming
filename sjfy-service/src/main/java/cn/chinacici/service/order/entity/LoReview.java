@@ -10,7 +10,7 @@ public class LoReview {
     private Integer id;
     private Integer orderId;
     private Integer userId;
-    private Integer score;
+    private Double score;
     private String content;
     private Integer isDeleted;
     private String createBy;
@@ -27,8 +27,8 @@ public class LoReview {
     public Integer getUserId() { return userId; }
     public void setUserId(Integer userId) { this.userId = userId; }
 
-    public Integer getScore() { return score; }
-    public void setScore(Integer score) { this.score = score; }
+    public Double getScore() { return score; }
+    public void setScore(Double score) { this.score = score; }
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
