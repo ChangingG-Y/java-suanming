@@ -1,3 +1,24 @@
 spring:
   application:
     name: java-suanming-prod
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/love_order?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: Asd521asd.
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: asd521asd.
+    timeout: 5000ms
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+love:
+  upload:
+    base-dir: /opt/uploads

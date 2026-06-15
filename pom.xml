@@ -35,6 +35,16 @@
                 <artifactId>sjfy-service</artifactId>
                 <version>${suanming.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <version>3.5.4</version>
+            </dependency>
+            <dependency>
+                <groupId>net.coobird</groupId>
+                <artifactId>thumbnailator</artifactId>
+                <version>0.4.19</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

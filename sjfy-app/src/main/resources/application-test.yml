@@ -1,3 +1,25 @@
 spring:
   application:
     name: java-suanming-test
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3307/love_order?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: Asd521asd.
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  redis:
+    host: 127.0.0.1
+    port: 63790
+    password: asd521asd.
+    timeout: 5000ms
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+love:
+  upload:
+    base-dir: /Users/changing/Documents/备忘录/uploads

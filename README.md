@@ -21,7 +21,7 @@ java -jar sjfy-app/target/sjfy-app-1.0-SNAPSHOT.jar
 Default API base:
 
 ```text
-http://localhost:8093/api
+https://suanming.koteclin.cn/api
 ```
 
 ## Main APIs
