@@ -19,6 +19,14 @@ public class TenantConfigController {
         this.userOrderService = userOrderService;
     }
 
+    /** GET /api/order/config/layout/public?tenantId= - 无需登录，按 tenantId 获取布局配置（供登录页用） */
+    @GetMapping("/config/layout/public")
+    public ResponseData<LayoutConfigDto> getPublicLayout(
+        @RequestParam(required = false, defaultValue = "1") Integer tenantId
+    ) {
+        return ResponseData.success(tenantConfigService.getLayoutConfig(tenantId));
+    }
+
     /** GET /api/order/config/layout - 需要登录，返回当前租户布局配置 */
     @GetMapping("/config/layout")
     public ResponseData<LayoutConfigDto> getLayout(
