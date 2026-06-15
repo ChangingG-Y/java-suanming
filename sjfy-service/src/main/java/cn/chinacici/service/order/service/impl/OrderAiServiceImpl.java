@@ -73,12 +73,10 @@ public class OrderAiServiceImpl implements OrderAiService {
         String apiKey;
         if ("deepseek".equals(provider)) {
             baseUrl = aiProperties.getDeepseekBaseUrl();
-            String dbKey = tenantConfigService.getConfig(tid, "ai.deepseek_api_key", "");
-            apiKey = StringUtils.hasText(dbKey) ? dbKey : aiProperties.getDeepseekApiKey();
+            apiKey = tenantConfigService.getConfig(tid, "ai.deepseek_api_key", "");
         } else {
             baseUrl = aiProperties.getVolcengineBaseUrl();
-            String dbKey = tenantConfigService.getConfig(tid, "ai.doubao_api_key", "");
-            apiKey = StringUtils.hasText(dbKey) ? dbKey : aiProperties.getVolcengineApiKey();
+            apiKey = tenantConfigService.getConfig(tid, "ai.doubao_api_key", "");
         }
 
         if (!StringUtils.hasText(apiKey)) {
