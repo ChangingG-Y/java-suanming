@@ -96,7 +96,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderRespDto createOrder(CreateOrderReqDto dto, Integer userId) {
+    public OrderRespDto createOrder(CreateOrderReqDto dto, Integer userId, Integer tenantId) {
         if (dto.getItems() == null || dto.getItems().isEmpty()) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "请至少选择一道菜");
         }
@@ -139,6 +139,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         LoOrder order = new LoOrder();
+        order.setTenantId(tenantId != null ? tenantId : 1);
         order.setOrderNo(orderNo);
         order.setUserId(userId);
         order.setOrderDate(targetDate);
@@ -276,11 +277,12 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public List<OrderRespDto> getAdminOrders(Integer state) {
+    public List<OrderRespDto> getAdminOrders(Integer state, Integer tenantId) {
         LambdaQueryWrapper<LoOrder> qw = new LambdaQueryWrapper<LoOrder>()
             .eq(LoOrder::getIsDeleted, 0)
             .orderByDesc(LoOrder::getCreatedAt);
         if (state != null) qw.eq(LoOrder::getState, state);
+        if (tenantId != null) qw.eq(LoOrder::getTenantId, tenantId);
         return orderMapper.selectList(qw).stream().map(o -> toOrderRespDto(o, false)).collect(Collectors.toList());
     }
 
@@ -390,6 +392,7 @@ public class OrderServiceImpl implements OrderService {
         dto.setHasReview(review != null);
         if (review != null) {
             dto.setReviewScore(review.getScore());
+            dto.setReviewContent(review.getContent());
             if (loadFullReview) {
                 dto.setReview(buildReviewRespDto(review));
             }
@@ -438,6 +441,25 @@ public class OrderServiceImpl implements OrderService {
             case 2: return "晚饭";
             default: return "";
         }
+    }
+
+    @Override
+    public void cancelOrder(Integer orderId, Integer userId) {
+        LoOrder order = orderMapper.selectById(orderId);
+        if (order == null || order.getIsDeleted() == 1) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "订单不存在");
+        }
+        if (!order.getUserId().equals(userId)) {
+            throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "无权操作");
+        }
+        if (order.getState() != 0) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "只能撤销待接单的订单");
+        }
+        int now = (int)(System.currentTimeMillis() / 1000);
+        orderMapper.update(null, new LambdaUpdateWrapper<LoOrder>()
+            .eq(LoOrder::getId, orderId)
+            .set(LoOrder::getIsDeleted, 1)
+            .set(LoOrder::getUpdatedAt, now));
     }
 
     private String stateName(Integer s) {

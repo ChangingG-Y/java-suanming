@@ -4,8 +4,8 @@ import cn.chinacici.service.ai.config.SuanmingAiProperties;
 import cn.chinacici.service.order.dto.CalorieAdviceReqDto;
 import cn.chinacici.service.order.dto.CalorieAdviceRespDto;
 import cn.chinacici.service.order.dto.CartItemDto;
-import cn.chinacici.service.order.service.AiConfigService;
 import cn.chinacici.service.order.service.OrderAiService;
+import cn.chinacici.service.order.service.TenantConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
@@ -26,12 +26,12 @@ import java.util.Map;
 public class OrderAiServiceImpl implements OrderAiService {
     private static final Logger log = LoggerFactory.getLogger(OrderAiServiceImpl.class);
 
-    private final AiConfigService aiConfigService;
+    private final TenantConfigService tenantConfigService;
     private final SuanmingAiProperties aiProperties;
     private final RestTemplate restTemplate;
 
-    public OrderAiServiceImpl(AiConfigService aiConfigService, SuanmingAiProperties aiProperties) {
-        this.aiConfigService = aiConfigService;
+    public OrderAiServiceImpl(TenantConfigService tenantConfigService, SuanmingAiProperties aiProperties) {
+        this.tenantConfigService = tenantConfigService;
         this.aiProperties = aiProperties;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(10000);
@@ -40,9 +40,9 @@ public class OrderAiServiceImpl implements OrderAiService {
     }
 
     @Override
-    public CalorieAdviceRespDto getCalorieAdvice(CalorieAdviceReqDto req) {
-        // 检查 AI 开关
-        String enabled = aiConfigService.getConfig("order.ai.enabled", "1");
+    public CalorieAdviceRespDto getCalorieAdvice(CalorieAdviceReqDto req, Integer tenantId) {
+        Integer tid = tenantId != null ? tenantId : 1;
+        String enabled = tenantConfigService.getConfig(tid, "order.ai.enabled", "1");
         if (!"1".equals(enabled)) {
             return new CalorieAdviceRespDto(null, false);
         }
@@ -50,11 +50,10 @@ public class OrderAiServiceImpl implements OrderAiService {
             return new CalorieAdviceRespDto(null, true);
         }
 
-        String provider = aiConfigService.getConfig("order.ai.provider", "doubao");
-        String model = aiConfigService.getConfig("order.ai.model", "doubao-seed-2-0-lite-260428");
-        String promptTemplate = aiConfigService.getConfig("order.ai.prompt", "");
+        String provider = tenantConfigService.getConfig(tid, "order.ai.provider", "doubao");
+        String model = tenantConfigService.getConfig(tid, "order.ai.model", "doubao-seed-2-0-lite-260428");
+        String promptTemplate = tenantConfigService.getConfig(tid, "order.ai.prompt", "");
 
-        // 拼接菜单文本
         StringBuilder menu = new StringBuilder();
         for (CartItemDto item : req.getItems()) {
             menu.append(item.getDishName()).append(" x").append(item.getQuantity());
@@ -68,19 +67,20 @@ public class OrderAiServiceImpl implements OrderAiService {
             userContent = "请估算以下菜单的热量并给出简短用餐建议（80字以内）：\n" + menu;
         }
 
-        // 解析 API 端点和 Key
         String baseUrl;
         String apiKey;
         if ("deepseek".equals(provider)) {
             baseUrl = aiProperties.getDeepseekBaseUrl();
-            apiKey = aiProperties.getDeepseekApiKey();
+            String dbKey = tenantConfigService.getConfig(tid, "ai.deepseek_api_key", "");
+            apiKey = StringUtils.hasText(dbKey) ? dbKey : aiProperties.getDeepseekApiKey();
         } else {
             baseUrl = aiProperties.getVolcengineBaseUrl();
-            apiKey = aiProperties.getVolcengineApiKey();
+            String dbKey = tenantConfigService.getConfig(tid, "ai.doubao_api_key", "");
+            apiKey = StringUtils.hasText(dbKey) ? dbKey : aiProperties.getVolcengineApiKey();
         }
 
         if (!StringUtils.hasText(apiKey)) {
-            log.warn("点餐AI热量分析：{} API Key 未配置", provider);
+            log.warn("点餐AI热量分析：{} API Key 未配置（租户{}）", provider, tid);
             return new CalorieAdviceRespDto("AI 服务暂未配置，无法获取热量分析", true);
         }
 
@@ -95,8 +95,6 @@ public class OrderAiServiceImpl implements OrderAiService {
             body.put("model", model);
             body.put("messages", messages);
             body.put("stream", false);
-            // 不设 max_tokens：让 prompt 里"80字以内"控制长度
-            // DeepSeek 思考类模型设置 max_tokens 会截断 reasoning_content，导致 content 为空
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -104,11 +102,10 @@ public class OrderAiServiceImpl implements OrderAiService {
 
             String url = (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl) + "/chat/completions";
             ResponseEntity<Map> response = restTemplate.postForEntity(url, new HttpEntity<>(body, headers), Map.class);
-
             String advice = extractContent(response.getBody());
             return new CalorieAdviceRespDto(advice, true);
         } catch (Exception e) {
-            log.warn("点餐AI热量分析调用失败: {}", e.getMessage());
+            log.warn("点餐AI热量分析调用失败（租户{}）: {}", tid, e.getMessage());
             return new CalorieAdviceRespDto("热量分析暂时不可用，请稍后再试", true);
         }
     }
@@ -123,16 +120,10 @@ public class OrderAiServiceImpl implements OrderAiService {
         Object message = ((Map<?, ?>) first).get("message");
         if (!(message instanceof Map)) return null;
         Map<?, ?> msgMap = (Map<?, ?>) message;
-
-        // 优先取 content；DeepSeek 思考类模型 content 可能为 null，fallback 到 reasoning_content
         String content = toNonEmptyString(msgMap.get("content"));
-        if (content != null) {
-            return content.length() > 200 ? content.substring(0, 200) : content;
-        }
+        if (content != null) return content.length() > 200 ? content.substring(0, 200) : content;
         String reasoning = toNonEmptyString(msgMap.get("reasoning_content"));
-        if (reasoning != null) {
-            return reasoning.length() > 200 ? reasoning.substring(0, 200) : reasoning;
-        }
+        if (reasoning != null) return reasoning.length() > 200 ? reasoning.substring(0, 200) : reasoning;
         return null;
     }
 

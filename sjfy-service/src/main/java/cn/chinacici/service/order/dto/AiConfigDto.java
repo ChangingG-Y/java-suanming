@@ -1,11 +1,12 @@
 package cn.chinacici.service.order.dto;
 
-/** 管理后台AI配置DTO */
 public class AiConfigDto {
-    private String enabled;   // "0"=关闭 "1"=开启
-    private String provider;  // "doubao" or "deepseek"
-    private String model;     // 模型ID
-    private String prompt;    // 提示词模板,{菜单}会被替换
+    private String enabled;
+    private String provider;
+    private String model;
+    private String prompt;
+    private String doubaoApiKey;
+    private String deepseekApiKey;
 
     public String getEnabled() { return enabled; }
     public void setEnabled(String enabled) { this.enabled = enabled; }
@@ -15,4 +16,8 @@ public class AiConfigDto {
     public void setModel(String model) { this.model = model; }
     public String getPrompt() { return prompt; }
     public void setPrompt(String prompt) { this.prompt = prompt; }
+    public String getDoubaoApiKey() { return doubaoApiKey; }
+    public void setDoubaoApiKey(String doubaoApiKey) { this.doubaoApiKey = doubaoApiKey; }
+    public String getDeepseekApiKey() { return deepseekApiKey; }
+    public void setDeepseekApiKey(String deepseekApiKey) { this.deepseekApiKey = deepseekApiKey; }
 }

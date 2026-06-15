@@ -29,67 +29,57 @@ public class DishServiceImpl implements DishService {
     }
 
     @Override
-    public List<CategoryRespDto> getCategoryList() {
-        List<LoDishCategory> list = categoryMapper.selectList(
-            new LambdaQueryWrapper<LoDishCategory>()
-                .eq(LoDishCategory::getState, 1)
-                .eq(LoDishCategory::getIsDeleted, 0)
-                .orderByAsc(LoDishCategory::getSeq)
-        );
-        return list.stream().map(this::toCategoryRespDto).collect(Collectors.toList());
+    public List<CategoryRespDto> getCategoryList(Integer tenantId) {
+        LambdaQueryWrapper<LoDishCategory> qw = new LambdaQueryWrapper<LoDishCategory>()
+            .eq(LoDishCategory::getState, 1)
+            .eq(LoDishCategory::getIsDeleted, 0)
+            .orderByAsc(LoDishCategory::getSeq);
+        if (tenantId != null) qw.eq(LoDishCategory::getTenantId, tenantId);
+        return categoryMapper.selectList(qw).stream().map(this::toCategoryRespDto).collect(Collectors.toList());
     }
 
     @Override
-    public List<DishRespDto> getDishList(Integer categoryId) {
+    public List<DishRespDto> getDishList(Integer categoryId, Integer tenantId) {
         LambdaQueryWrapper<LoDish> qw = new LambdaQueryWrapper<LoDish>()
             .eq(LoDish::getState, 1)
             .eq(LoDish::getIsDeleted, 0)
             .orderByAsc(LoDish::getSeq);
-        if (categoryId != null) {
-            qw.eq(LoDish::getCategoryId, categoryId);
-        }
-        List<LoDish> list = dishMapper.selectList(qw);
-        return list.stream().map(this::toDishRespDto).collect(Collectors.toList());
+        if (categoryId != null) qw.eq(LoDish::getCategoryId, categoryId);
+        if (tenantId != null) qw.eq(LoDish::getTenantId, tenantId);
+        return dishMapper.selectList(qw).stream().map(this::toDishRespDto).collect(Collectors.toList());
     }
 
     @Override
-    public List<CategoryRespDto> getAdminCategoryList() {
-        List<LoDishCategory> list = categoryMapper.selectList(
-            new LambdaQueryWrapper<LoDishCategory>()
-                .eq(LoDishCategory::getIsDeleted, 0)
-                .orderByAsc(LoDishCategory::getSeq)
-        );
-        return list.stream().map(this::toCategoryRespDto).collect(Collectors.toList());
+    public List<CategoryRespDto> getAdminCategoryList(Integer tenantId) {
+        LambdaQueryWrapper<LoDishCategory> qw = new LambdaQueryWrapper<LoDishCategory>()
+            .eq(LoDishCategory::getIsDeleted, 0)
+            .orderByAsc(LoDishCategory::getSeq);
+        if (tenantId != null) qw.eq(LoDishCategory::getTenantId, tenantId);
+        return categoryMapper.selectList(qw).stream().map(this::toCategoryRespDto).collect(Collectors.toList());
     }
 
     @Override
-    public List<DishRespDto> getAdminDishList(Integer categoryId) {
+    public List<DishRespDto> getAdminDishList(Integer categoryId, Integer tenantId) {
         LambdaQueryWrapper<LoDish> qw = new LambdaQueryWrapper<LoDish>()
             .eq(LoDish::getIsDeleted, 0)
             .orderByAsc(LoDish::getSeq);
-        if (categoryId != null) {
-            qw.eq(LoDish::getCategoryId, categoryId);
-        }
-        List<LoDish> list = dishMapper.selectList(qw);
-        return list.stream().map(this::toDishRespDto).collect(Collectors.toList());
+        if (categoryId != null) qw.eq(LoDish::getCategoryId, categoryId);
+        if (tenantId != null) qw.eq(LoDish::getTenantId, tenantId);
+        return dishMapper.selectList(qw).stream().map(this::toDishRespDto).collect(Collectors.toList());
     }
 
     @Override
-    public CategoryRespDto saveCategory(SaveCategoryReqDto dto, Integer operatorId) {
+    public CategoryRespDto saveCategory(SaveCategoryReqDto dto, Integer operatorId, Integer tenantId) {
         int now = (int)(System.currentTimeMillis() / 1000);
         LoDishCategory category = new LoDishCategory();
+        category.setTenantId(tenantId);
         category.setName(dto.getName());
         category.setState(dto.getState() != null ? dto.getState() : 1);
         category.setIsDeleted(0);
         category.setCreatedAt(now);
         category.setUpdatedAt(now);
         categoryMapper.insert(category);
-        // seq 默认用 id
-        if (dto.getSeq() != null) {
-            category.setSeq(dto.getSeq());
-        } else {
-            category.setSeq(category.getId());
-        }
+        category.setSeq(dto.getSeq() != null ? dto.getSeq() : category.getId());
         categoryMapper.updateById(category);
         return toCategoryRespDto(category);
     }
@@ -124,25 +114,21 @@ public class DishServiceImpl implements DishService {
     }
 
     @Override
-    public DishRespDto saveDish(SaveDishReqDto dto, Integer operatorId) {
+    public DishRespDto saveDish(SaveDishReqDto dto, Integer operatorId, Integer tenantId) {
         int now = (int)(System.currentTimeMillis() / 1000);
         LoDish dish = new LoDish();
+        dish.setTenantId(tenantId);
         dish.setCategoryId(dto.getCategoryId());
         dish.setName(dto.getName());
         dish.setDescription(dto.getDescription() != null ? dto.getDescription() : "");
         dish.setImageFileId(dto.getImageFileId() != null ? dto.getImageFileId() : 0);
         dish.setState(dto.getState() != null ? dto.getState() : 1);
-        // 变更2：保存价格字段
         dish.setPrice(dto.getPrice());
         dish.setIsDeleted(0);
         dish.setCreatedAt(now);
         dish.setUpdatedAt(now);
         dishMapper.insert(dish);
-        if (dto.getSeq() != null) {
-            dish.setSeq(dto.getSeq());
-        } else {
-            dish.setSeq(dish.getId());
-        }
+        dish.setSeq(dto.getSeq() != null ? dto.getSeq() : dish.getId());
         dishMapper.updateById(dish);
         return toDishRespDto(dish);
     }
@@ -163,7 +149,6 @@ public class DishServiceImpl implements DishService {
         if (dto.getImageFileId() != null) uw.set(LoDish::getImageFileId, dto.getImageFileId());
         if (dto.getState() != null) uw.set(LoDish::getState, dto.getState());
         if (dto.getSeq() != null) uw.set(LoDish::getSeq, dto.getSeq());
-        // 变更2：更新价格
         if (dto.getPrice() != null) uw.set(LoDish::getPrice, dto.getPrice());
         dishMapper.update(null, uw);
     }
@@ -199,7 +184,6 @@ public class DishServiceImpl implements DishService {
         dto.setImageFileId(d.getImageFileId());
         dto.setState(d.getState());
         dto.setSeq(d.getSeq());
-        // 变更2：输出价格字段
         dto.setPrice(d.getPrice());
         if (d.getImageFileId() != null && d.getImageFileId() > 0) {
             dto.setImageUrl("/api/order/file/" + d.getImageFileId());

@@ -9,7 +9,6 @@ import cn.chinacici.service.order.mapper.LoUserMapper;
 import cn.chinacici.service.order.service.UserOrderService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -24,8 +23,7 @@ public class UserOrderServiceImpl implements UserOrderService {
     private static final String TOKEN_PREFIX = "love:order:token:";
     private static final long TOKEN_TTL_DAYS = 7;
 
-    public UserOrderServiceImpl(LoUserMapper userMapper,
-                                StringRedisTemplate redisTemplate) {
+    public UserOrderServiceImpl(LoUserMapper userMapper, StringRedisTemplate redisTemplate) {
         this.userMapper = userMapper;
         this.redisTemplate = redisTemplate;
     }
@@ -43,10 +41,12 @@ public class UserOrderServiceImpl implements UserOrderService {
         if (user == null || !Objects.equals(password, user.getPassword())) {
             throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "用户名或密码错误");
         }
+        Integer tenantId = user.getTenantId() != null ? user.getTenantId() : 1;
         String token = UUID.randomUUID().toString().replace("-", "");
+        // format: userId:role:tenantId
         redisTemplate.opsForValue().set(
             TOKEN_PREFIX + token,
-            user.getId() + ":" + user.getRole(),
+            user.getId() + ":" + user.getRole() + ":" + tenantId,
             TOKEN_TTL_DAYS, TimeUnit.DAYS
         );
         LoginRespDto resp = new LoginRespDto();
@@ -54,6 +54,7 @@ public class UserOrderServiceImpl implements UserOrderService {
         resp.setUserId(user.getId());
         resp.setRole(user.getRole());
         resp.setNickname(user.getNickname());
+        resp.setTenantId(tenantId);
         return resp;
     }
 
@@ -71,6 +72,7 @@ public class UserOrderServiceImpl implements UserOrderService {
         SessionDto dto = new SessionDto();
         dto.setUserId(Integer.parseInt(parts[0]));
         dto.setRole(Integer.parseInt(parts[1]));
+        dto.setTenantId(parts.length >= 3 ? Integer.parseInt(parts[2]) : 1);
         LoUser user = userMapper.selectById(dto.getUserId());
         if (user != null) dto.setNickname(user.getNickname());
         return dto;
@@ -85,8 +87,18 @@ public class UserOrderServiceImpl implements UserOrderService {
     @Override
     public SessionDto requireAdmin(String token) {
         SessionDto session = getSession(token);
-        if (session.getRole() == null || session.getRole() != 1) {
+        // role 0 = super admin, role 1 = tenant admin; both can do tenant-level admin
+        if (session.getRole() == null || session.getRole() > 1) {
             throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "需要管理员权限");
+        }
+        return session;
+    }
+
+    @Override
+    public SessionDto requireSuperAdmin(String token) {
+        SessionDto session = getSession(token);
+        if (session.getRole() == null || session.getRole() != 0) {
+            throw new ServiceException(ResultCode.USER_NO_PRIVILEGE, "需要超级管理员权限");
         }
         return session;
     }

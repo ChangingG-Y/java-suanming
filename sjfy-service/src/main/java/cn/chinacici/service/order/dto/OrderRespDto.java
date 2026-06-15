@@ -22,6 +22,7 @@ public class OrderRespDto {
     private Integer totalKiss;
     // 变更5/6：评价分数（有评价时填score，无则null）
     private Double reviewScore;
+    private String reviewContent;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -73,4 +74,7 @@ public class OrderRespDto {
 
     public Double getReviewScore() { return reviewScore; }
     public void setReviewScore(Double reviewScore) { this.reviewScore = reviewScore; }
+
+    public String getReviewContent() { return reviewContent; }
+    public void setReviewContent(String reviewContent) { this.reviewContent = reviewContent; }
 }

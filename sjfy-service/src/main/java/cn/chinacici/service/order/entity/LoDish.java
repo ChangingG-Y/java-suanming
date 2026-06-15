@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 public class LoDish {
     @TableId(type = IdType.AUTO)
     private Integer id;
+    private Integer tenantId;
     private Integer categoryId;
     private String name;
     private String description;
@@ -23,6 +24,9 @@ public class LoDish {
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
+
+    public Integer getTenantId() { return tenantId; }
+    public void setTenantId(Integer tenantId) { this.tenantId = tenantId; }
 
     public Integer getCategoryId() { return categoryId; }
     public void setCategoryId(Integer categoryId) { this.categoryId = categoryId; }

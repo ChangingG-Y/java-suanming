@@ -7,8 +7,10 @@ public interface UserOrderService {
     LoginRespDto login(String username, String password);
     void logout(String token);
     SessionDto getSession(String token);
-    /** 从 token 获取 userId，如果 token 无效抛 ServiceException(NOT_LOGIN) */
+    /** 从 token 获取 userId，token 无效则抛 NOT_LOGIN */
     Integer requireUserId(String token);
-    /** 从 token 获取用户信息，如果非管理员(role!=1)抛 ServiceException(USER_NO_PRIVILEGE) */
+    /** 从 token 获取 session，非管理员（role > 1）则抛 USER_NO_PRIVILEGE */
     SessionDto requireAdmin(String token);
+    /** 从 token 获取 session，非超级管理员（role != 0）则抛 USER_NO_PRIVILEGE */
+    SessionDto requireSuperAdmin(String token);
 }

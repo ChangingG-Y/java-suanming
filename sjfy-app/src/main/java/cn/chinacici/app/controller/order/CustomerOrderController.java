@@ -6,6 +6,7 @@ import cn.chinacici.service.order.dto.CreateReviewReqDto;
 import cn.chinacici.service.order.dto.DayOrderSummaryDto;
 import cn.chinacici.service.order.dto.OrderRespDto;
 import cn.chinacici.service.order.dto.ReviewRespDto;
+import cn.chinacici.service.order.dto.SessionDto;
 import cn.chinacici.service.order.service.OrderService;
 import cn.chinacici.service.order.service.ReviewService;
 import cn.chinacici.service.order.service.UserOrderService;
@@ -38,8 +39,8 @@ public class CustomerOrderController {
         @RequestBody CreateOrderReqDto dto,
         @RequestHeader(value = "Authorization", required = false) String auth
     ) {
-        Integer userId = userOrderService.requireUserId(auth);
-        return ResponseData.success(orderService.createOrder(dto, userId));
+        SessionDto session = userOrderService.getSession(auth);
+        return ResponseData.success(orderService.createOrder(dto, session.getUserId(), session.getTenantId()));
     }
 
     /** GET /api/order/orders/my - 我的订单列表（需要登录） */
@@ -90,6 +91,17 @@ public class CustomerOrderController {
     ) {
         Integer userId = userOrderService.requireUserId(auth);
         return ResponseData.success(reviewService.getReviewByOrderId(orderId, userId));
+    }
+
+    /** POST /api/order/orders/{id}/cancel - 撤单（仅限待接单状态） */
+    @PostMapping("/order/orders/{id}/cancel")
+    public ResponseData<Void> cancelOrder(
+        @PathVariable Integer id,
+        @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+        Integer userId = userOrderService.requireUserId(auth);
+        orderService.cancelOrder(id, userId);
+        return ResponseData.success();
     }
 
     /** GET /api/order/orders/history - 按天统计订单历史（变更6） */

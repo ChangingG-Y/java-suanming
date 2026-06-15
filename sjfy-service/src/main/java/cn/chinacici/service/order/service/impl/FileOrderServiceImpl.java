@@ -35,7 +35,7 @@ public class FileOrderServiceImpl implements FileOrderService {
     }
 
     @Override
-    public FileRespDto upload(MultipartFile file, Integer userId) {
+    public FileRespDto upload(MultipartFile file, Integer userId, String mode) {
         if (file == null || file.isEmpty()) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "请选择文件");
         }
@@ -48,24 +48,29 @@ public class FileOrderServiceImpl implements FileOrderService {
         String uuid = UUID.randomUUID().toString().replace("-", "");
         String ext = getExt(file.getOriginalFilename(), contentType);
 
-        String relFilePath = "files/" + dateDir + "/" + uuid + "." + ext;
-        String relThumbPath = "thumbnails/" + dateDir + "/" + uuid + "_thumb.jpg";
-
         File baseDirFile = new File(baseDir);
-        File destFile = new File(baseDirFile, relFilePath);
+        String relFilePath;
+        String relThumbPath = "thumbnails/" + dateDir + "/" + uuid + "_thumb.jpg";
         File destThumb = new File(baseDirFile, relThumbPath);
-
-        destFile.getParentFile().mkdirs();
         destThumb.getParentFile().mkdirs();
 
         try {
-            file.transferTo(destFile);
-            // 生成 800x800 缩略图（保持比例，不超过800x800）
-            Thumbnails.of(destFile)
-                .size(800, 800)
-                .keepAspectRatio(true)
-                .outputFormat("jpg")
-                .toFile(destThumb);
+            if ("dish".equals(mode)) {
+                // 菜品：前端已裁好 800x800，直接存为缩略图，不保留原图
+                file.transferTo(destThumb);
+                relFilePath = relThumbPath; // 原图路径指向同一文件
+            } else {
+                // 评价（默认）：保留原图，缩略图长边不超 1500
+                relFilePath = "files/" + dateDir + "/" + uuid + "." + ext;
+                File destFile = new File(baseDirFile, relFilePath);
+                destFile.getParentFile().mkdirs();
+                file.transferTo(destFile);
+                Thumbnails.of(destFile)
+                    .size(1500, 1500)
+                    .keepAspectRatio(true)
+                    .outputFormat("jpg")
+                    .toFile(destThumb);
+            }
         } catch (IOException e) {
             throw new ServiceException(ResultCode.UNKNOWN_ERROR, "文件保存失败: " + e.getMessage());
         }

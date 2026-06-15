@@ -10,6 +10,7 @@ import java.time.LocalDate;
 public class LoOrder {
     @TableId(type = IdType.AUTO)
     private Integer id;
+    private Integer tenantId;
     private String orderNo;
     private Integer userId;
     private LocalDate orderDate;
@@ -28,6 +29,9 @@ public class LoOrder {
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
+
+    public Integer getTenantId() { return tenantId; }
+    public void setTenantId(Integer tenantId) { this.tenantId = tenantId; }
 
     public String getOrderNo() { return orderNo; }
     public void setOrderNo(String orderNo) { this.orderNo = orderNo; }

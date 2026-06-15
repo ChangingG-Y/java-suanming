@@ -37,14 +37,15 @@ public class FileOrderController {
         this.uploadProperties = uploadProperties;
     }
 
-    /** POST /api/order/file/upload - 需要登录 */
+    /** POST /api/order/file/upload - 需要登录；mode=dish(缩略图only) | review(原图+缩略图) */
     @PostMapping("/upload")
     public ResponseData<FileRespDto> upload(
         @RequestParam("file") MultipartFile file,
+        @RequestParam(value = "mode", defaultValue = "review") String mode,
         @RequestHeader(value = "Authorization", required = false) String auth
     ) {
         Integer userId = userOrderService.requireUserId(auth);
-        return ResponseData.success(fileOrderService.upload(file, userId));
+        return ResponseData.success(fileOrderService.upload(file, userId, mode));
     }
 
     /** GET /api/order/file/{id} - 公开访问 */

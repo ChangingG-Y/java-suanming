@@ -4,6 +4,7 @@ import cn.chinacici.core.ResponseData;
 import cn.chinacici.service.order.dto.CategoryRespDto;
 import cn.chinacici.service.order.dto.DishRespDto;
 import cn.chinacici.service.order.dto.MealTypeInfoDto;
+import cn.chinacici.service.order.dto.SessionDto;
 import cn.chinacici.service.order.service.DishService;
 import cn.chinacici.service.order.service.OrderService;
 import cn.chinacici.service.order.service.UserOrderService;
@@ -28,18 +29,23 @@ public class MenuController {
         this.userOrderService = userOrderService;
     }
 
-    /** GET /api/order/menu/categories - 公开 */
+    /** GET /api/order/menu/categories - 需要登录（多租户下菜单按租户隔离） */
     @GetMapping("/order/menu/categories")
-    public ResponseData<List<CategoryRespDto>> getCategories() {
-        return ResponseData.success(dishService.getCategoryList());
+    public ResponseData<List<CategoryRespDto>> getCategories(
+        @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+        SessionDto session = userOrderService.getSession(auth);
+        return ResponseData.success(dishService.getCategoryList(session.getTenantId()));
     }
 
-    /** GET /api/order/menu/dishes?categoryId= - 公开 */
+    /** GET /api/order/menu/dishes?categoryId= - 需要登录 */
     @GetMapping("/order/menu/dishes")
     public ResponseData<List<DishRespDto>> getDishes(
-        @RequestParam(required = false) Integer categoryId
+        @RequestParam(required = false) Integer categoryId,
+        @RequestHeader(value = "Authorization", required = false) String auth
     ) {
-        return ResponseData.success(dishService.getDishList(categoryId));
+        SessionDto session = userOrderService.getSession(auth);
+        return ResponseData.success(dishService.getDishList(categoryId, session.getTenantId()));
     }
 
     /** GET /api/order/meal-type - 需要登录 */

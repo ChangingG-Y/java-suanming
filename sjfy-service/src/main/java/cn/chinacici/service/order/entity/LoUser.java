@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 public class LoUser {
     @TableId(type = IdType.AUTO)
     private Integer id;
+    private Integer tenantId;
     private String username;
     private String password;
     private Integer role;
@@ -21,6 +22,9 @@ public class LoUser {
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
+
+    public Integer getTenantId() { return tenantId; }
+    public void setTenantId(Integer tenantId) { this.tenantId = tenantId; }
 
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
