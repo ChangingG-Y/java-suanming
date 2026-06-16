@@ -60,6 +60,6 @@ public class OrderAiController {
         SessionDto admin = userOrderService.requireAdmin(auth);
         String name = body.get("name");
         String desc = orderAiService.generateDishDescription(name, admin.getTenantId());
-        return ResponseData.success(desc);
+        return ResponseData.success((Object) desc);
     }
 }
