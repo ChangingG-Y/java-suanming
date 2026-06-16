@@ -13,6 +13,9 @@ public class LayoutConfigDto {
     private String tab2Label;
     private String adminTitle;
     private String successMsg;
+    private String calEmojiCooking;
+    private String calEmojiDining;
+    private String calEmojiDiary;
 
     public String getLoginEmoji() { return loginEmoji; }
     public void setLoginEmoji(String loginEmoji) { this.loginEmoji = loginEmoji; }
@@ -38,4 +41,10 @@ public class LayoutConfigDto {
     public void setAdminTitle(String adminTitle) { this.adminTitle = adminTitle; }
     public String getSuccessMsg() { return successMsg; }
     public void setSuccessMsg(String successMsg) { this.successMsg = successMsg; }
+    public String getCalEmojiCooking() { return calEmojiCooking; }
+    public void setCalEmojiCooking(String calEmojiCooking) { this.calEmojiCooking = calEmojiCooking; }
+    public String getCalEmojiDining() { return calEmojiDining; }
+    public void setCalEmojiDining(String calEmojiDining) { this.calEmojiDining = calEmojiDining; }
+    public String getCalEmojiDiary() { return calEmojiDiary; }
+    public void setCalEmojiDiary(String calEmojiDiary) { this.calEmojiDiary = calEmojiDiary; }
 }

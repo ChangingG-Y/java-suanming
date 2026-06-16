@@ -88,6 +88,9 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         dto.setTab2Label(m.getOrDefault("layout.tab.2.label", "历史"));
         dto.setAdminTitle(m.getOrDefault("layout.admin.title", "管理后台"));
         dto.setSuccessMsg(m.getOrDefault("layout.order.success_msg", "下单成功！等待接单 🍳"));
+        dto.setCalEmojiCooking(m.getOrDefault("layout.cal.emoji.cooking", "🍳"));
+        dto.setCalEmojiDining(m.getOrDefault("layout.cal.emoji.dining", "🍜"));
+        dto.setCalEmojiDiary(m.getOrDefault("layout.cal.emoji.diary", "📝"));
         return dto;
     }
 
@@ -103,8 +106,11 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         if (dto.getTab1Label() != null)   setConfig(tenantId, "layout.tab.1.label",  dto.getTab1Label());
         if (dto.getTab2Icon() != null)    setConfig(tenantId, "layout.tab.2.icon",   dto.getTab2Icon());
         if (dto.getTab2Label() != null)   setConfig(tenantId, "layout.tab.2.label",  dto.getTab2Label());
-        if (dto.getAdminTitle() != null)  setConfig(tenantId, "layout.admin.title",       dto.getAdminTitle());
-        if (dto.getSuccessMsg() != null)  setConfig(tenantId, "layout.order.success_msg",  dto.getSuccessMsg());
+        if (dto.getAdminTitle() != null)       setConfig(tenantId, "layout.admin.title",         dto.getAdminTitle());
+        if (dto.getSuccessMsg() != null)       setConfig(tenantId, "layout.order.success_msg",   dto.getSuccessMsg());
+        if (dto.getCalEmojiCooking() != null)  setConfig(tenantId, "layout.cal.emoji.cooking",   dto.getCalEmojiCooking());
+        if (dto.getCalEmojiDining() != null)   setConfig(tenantId, "layout.cal.emoji.dining",    dto.getCalEmojiDining());
+        if (dto.getCalEmojiDiary() != null)    setConfig(tenantId, "layout.cal.emoji.diary",     dto.getCalEmojiDiary());
     }
 
     @Override
