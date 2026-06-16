@@ -10,6 +10,8 @@ import cn.chinacici.service.order.service.OrderAiService;
 import cn.chinacici.service.order.service.UserOrderService;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/order")
 public class OrderAiController {
@@ -48,5 +50,16 @@ public class OrderAiController {
         SessionDto admin = userOrderService.requireAdmin(auth);
         aiConfigService.updateAiConfig(admin.getTenantId(), dto);
         return ResponseData.success();
+    }
+
+    @PostMapping("/admin/ai/generate-description")
+    public ResponseData<String> generateDishDescription(
+        @RequestBody Map<String, String> body,
+        @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+        SessionDto admin = userOrderService.requireAdmin(auth);
+        String name = body.get("name");
+        String desc = orderAiService.generateDishDescription(name, admin.getTenantId());
+        return ResponseData.success(desc);
     }
 }

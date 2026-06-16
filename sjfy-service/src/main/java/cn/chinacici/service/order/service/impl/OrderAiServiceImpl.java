@@ -85,29 +85,54 @@ public class OrderAiServiceImpl implements OrderAiService {
         }
 
         try {
-            List<Map<String, String>> messages = new ArrayList<>();
-            Map<String, String> msg = new HashMap<>();
-            msg.put("role", "user");
-            msg.put("content", userContent);
-            messages.add(msg);
-
-            Map<String, Object> body = new HashMap<>();
-            body.put("model", model);
-            body.put("messages", messages);
-            body.put("stream", false);
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(apiKey);
-
-            String url = (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl) + "/chat/completions";
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, new HttpEntity<>(body, headers), Map.class);
-            String advice = extractContent(response.getBody());
+            String advice = callAi(baseUrl, apiKey, model, userContent, tid);
             return new CalorieAdviceRespDto(advice, true);
         } catch (Exception e) {
             log.warn("点餐AI热量分析调用失败（租户{}）: {}", tid, e.getMessage());
             return new CalorieAdviceRespDto("热量分析暂时不可用，请稍后再试", true);
         }
+    }
+
+    @Override
+    public String generateDishDescription(String name, Integer tenantId) {
+        Integer tid = tenantId != null ? tenantId : 1;
+        String provider = tenantConfigService.getConfig(tid, "order.ai.provider", "doubao");
+        String model = tenantConfigService.getConfig(tid, "order.ai.model", "doubao-seed-2-0-lite-260428");
+        String baseUrl;
+        String apiKey;
+        if ("deepseek".equals(provider)) {
+            baseUrl = aiProperties.getDeepseekBaseUrl();
+            apiKey = tenantConfigService.getConfig(tid, "ai.deepseek_api_key", "");
+        } else {
+            baseUrl = aiProperties.getVolcengineBaseUrl();
+            apiKey = tenantConfigService.getConfig(tid, "ai.doubao_api_key", "");
+        }
+        if (!StringUtils.hasText(apiKey)) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "AI API Key 未配置，请在AI配置页面填写");
+        }
+        String prompt = "帮我给菜品「" + name + "」写一句简短的中文介绍，要求：一句话，16字以内，口语化有食欲感，直接输出介绍内容不加引号";
+        return callAi(baseUrl, apiKey, model, prompt, tid);
+    }
+
+    private String callAi(String baseUrl, String apiKey, String model, String userContent, Integer tid) {
+        List<Map<String, String>> messages = new ArrayList<>();
+        Map<String, String> msg = new HashMap<>();
+        msg.put("role", "user");
+        msg.put("content", userContent);
+        messages.add(msg);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        body.put("stream", false);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        String url = (baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl) + "/chat/completions";
+        ResponseEntity<Map> response = restTemplate.postForEntity(url, new HttpEntity<>(body, headers), Map.class);
+        return extractContent(response.getBody());
     }
 
     @SuppressWarnings("unchecked")
