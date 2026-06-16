@@ -38,6 +38,15 @@ public class AdminOrderController {
         this.userOrderService = userOrderService;
     }
 
+    @GetMapping("/orders/{id}")
+    public ResponseData<OrderRespDto> getOrderDetail(
+        @PathVariable Integer id,
+        @RequestHeader(value = "Authorization", required = false) String auth
+    ) {
+        userOrderService.requireAdmin(auth);
+        return ResponseData.success(orderService.getOrderById(id, null));
+    }
+
     @GetMapping("/orders")
     public ResponseData<List<OrderRespDto>> getOrders(
         @RequestParam(required = false) Integer state,

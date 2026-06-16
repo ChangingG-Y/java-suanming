@@ -68,6 +68,13 @@ public class OrderServiceImpl implements OrderService {
         return 2;
     }
 
+    /** 20:00 后的早饭属于明天 */
+    private LocalDate calcOrderDate(int mealType) {
+        int hour = LocalTime.now().getHour();
+        if (mealType == 0 && hour >= 20) return LocalDate.now().plusDays(1);
+        return LocalDate.now();
+    }
+
     @Override
     public MealTypeInfoDto getMealTypeInfo(Integer userId) {
         int mealType = calcMealType();
@@ -76,6 +83,7 @@ public class OrderServiceImpl implements OrderService {
         MealTypeInfoDto dto = new MealTypeInfoDto();
         dto.setMealType(mealType);
         dto.setMealTypeName(mealTypeName(mealType));
+        dto.setOrderDate(calcOrderDate(mealType).toString());
 
         // 只有晚饭且订单未出餐(state < 2)才能加菜（加菜会合并进原订单）
         List<LoOrder> todayDinnerOrders = orderMapper.selectList(
@@ -208,7 +216,7 @@ public class OrderServiceImpl implements OrderService {
     /** 解析前端餐次日期，未传或格式异常时使用今天，避免因为日期控件缺省导致下单失败。 */
     private LocalDate parseMealDate(String mealDate) {
         if (mealDate == null || mealDate.trim().isEmpty()) {
-            return LocalDate.now();
+            return calcOrderDate(calcMealType());
         }
         try {
             return LocalDate.parse(mealDate.trim());

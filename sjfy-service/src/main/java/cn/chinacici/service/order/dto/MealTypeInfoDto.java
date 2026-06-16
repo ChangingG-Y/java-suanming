@@ -17,4 +17,8 @@ public class MealTypeInfoDto {
 
     public Integer getTodayDinnerOrderId() { return todayDinnerOrderId; }
     public void setTodayDinnerOrderId(Integer todayDinnerOrderId) { this.todayDinnerOrderId = todayDinnerOrderId; }
+
+    private String orderDate;
+    public String getOrderDate() { return orderDate; }
+    public void setOrderDate(String orderDate) { this.orderDate = orderDate; }
 }
