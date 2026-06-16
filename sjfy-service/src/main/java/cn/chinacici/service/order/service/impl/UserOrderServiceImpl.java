@@ -21,7 +21,7 @@ public class UserOrderServiceImpl implements UserOrderService {
     private final LoUserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
     private static final String TOKEN_PREFIX = "love:order:token:";
-    private static final long TOKEN_TTL_DAYS = 7;
+    private static final long TOKEN_TTL_SECONDS = 86400; // 1天，有操作则滑动续期
 
     public UserOrderServiceImpl(LoUserMapper userMapper, StringRedisTemplate redisTemplate) {
         this.userMapper = userMapper;
@@ -47,7 +47,7 @@ public class UserOrderServiceImpl implements UserOrderService {
         redisTemplate.opsForValue().set(
             TOKEN_PREFIX + token,
             user.getId() + ":" + user.getRole() + ":" + tenantId,
-            TOKEN_TTL_DAYS, TimeUnit.DAYS
+            TOKEN_TTL_SECONDS, TimeUnit.SECONDS
         );
         LoginRespDto resp = new LoginRespDto();
         resp.setToken(token);
@@ -112,6 +112,8 @@ public class UserOrderServiceImpl implements UserOrderService {
         if (!StringUtils.hasText(value)) {
             throw new ServiceException(ResultCode.NOT_LOGIN, "登录已过期，请重新登录");
         }
+        // 有操作就续期
+        redisTemplate.expire(TOKEN_PREFIX + normalized, TOKEN_TTL_SECONDS, TimeUnit.SECONDS);
         return value.split(":");
     }
 
