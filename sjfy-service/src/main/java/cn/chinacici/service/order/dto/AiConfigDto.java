@@ -7,6 +7,7 @@ public class AiConfigDto {
     private String prompt;
     private String doubaoApiKey;
     private String deepseekApiKey;
+    private String dishDescPrompt;
 
     public String getEnabled() { return enabled; }
     public void setEnabled(String enabled) { this.enabled = enabled; }
@@ -20,4 +21,6 @@ public class AiConfigDto {
     public void setDoubaoApiKey(String doubaoApiKey) { this.doubaoApiKey = doubaoApiKey; }
     public String getDeepseekApiKey() { return deepseekApiKey; }
     public void setDeepseekApiKey(String deepseekApiKey) { this.deepseekApiKey = deepseekApiKey; }
+    public String getDishDescPrompt() { return dishDescPrompt; }
+    public void setDishDescPrompt(String dishDescPrompt) { this.dishDescPrompt = dishDescPrompt; }
 }

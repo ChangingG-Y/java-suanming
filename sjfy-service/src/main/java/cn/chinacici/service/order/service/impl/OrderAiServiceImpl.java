@@ -110,7 +110,10 @@ public class OrderAiServiceImpl implements OrderAiService {
         if (!StringUtils.hasText(apiKey)) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "AI API Key 未配置，请在AI配置页面填写");
         }
-        String prompt = "帮我给菜品「" + name + "」写一句简短的中文介绍，要求：一句话，16字以内，口语化有食欲感，直接输出介绍内容不加引号";
+        String promptTemplate = tenantConfigService.getConfig(tid, "ai.dish_desc_prompt", "");
+        String prompt = StringUtils.hasText(promptTemplate)
+            ? promptTemplate.replace("{菜名}", name)
+            : "帮我给菜品「" + name + "」写一句简短的中文介绍，要求：一句话，16字以内，口语化有食欲感，直接输出介绍内容不加引号";
         return callAi(baseUrl, apiKey, model, prompt, tid);
     }
 

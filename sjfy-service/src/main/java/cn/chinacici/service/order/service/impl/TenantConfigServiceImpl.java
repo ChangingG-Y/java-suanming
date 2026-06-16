@@ -116,6 +116,7 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         dto.setPrompt(getConfig(tenantId, "order.ai.prompt", ""));
         dto.setDoubaoApiKey(getConfig(tenantId, "ai.doubao_api_key", ""));
         dto.setDeepseekApiKey(getConfig(tenantId, "ai.deepseek_api_key", ""));
+        dto.setDishDescPrompt(getConfig(tenantId, "ai.dish_desc_prompt", ""));
         return dto;
     }
 
@@ -127,5 +128,6 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         if (dto.getPrompt() != null)          setConfig(tenantId, "order.ai.prompt",        dto.getPrompt());
         if (dto.getDoubaoApiKey() != null)    setConfig(tenantId, "ai.doubao_api_key",      dto.getDoubaoApiKey());
         if (dto.getDeepseekApiKey() != null)  setConfig(tenantId, "ai.deepseek_api_key",    dto.getDeepseekApiKey());
+        if (dto.getDishDescPrompt() != null)  setConfig(tenantId, "ai.dish_desc_prompt",    dto.getDishDescPrompt());
     }
 }
