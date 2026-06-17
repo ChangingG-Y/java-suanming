@@ -16,6 +16,9 @@ public class LayoutConfigDto {
     private String calEmojiCooking;
     private String calEmojiDining;
     private String calEmojiDiary;
+    private String calLabelCooking;
+    private String calLabelDining;
+    private String calLabelDiary;
 
     public String getLoginEmoji() { return loginEmoji; }
     public void setLoginEmoji(String loginEmoji) { this.loginEmoji = loginEmoji; }
@@ -47,4 +50,10 @@ public class LayoutConfigDto {
     public void setCalEmojiDining(String calEmojiDining) { this.calEmojiDining = calEmojiDining; }
     public String getCalEmojiDiary() { return calEmojiDiary; }
     public void setCalEmojiDiary(String calEmojiDiary) { this.calEmojiDiary = calEmojiDiary; }
+    public String getCalLabelCooking() { return calLabelCooking; }
+    public void setCalLabelCooking(String calLabelCooking) { this.calLabelCooking = calLabelCooking; }
+    public String getCalLabelDining() { return calLabelDining; }
+    public void setCalLabelDining(String calLabelDining) { this.calLabelDining = calLabelDining; }
+    public String getCalLabelDiary() { return calLabelDiary; }
+    public void setCalLabelDiary(String calLabelDiary) { this.calLabelDiary = calLabelDiary; }
 }

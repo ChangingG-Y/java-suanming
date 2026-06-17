@@ -91,6 +91,9 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         dto.setCalEmojiCooking(m.getOrDefault("layout.cal.emoji.cooking", "🍳"));
         dto.setCalEmojiDining(m.getOrDefault("layout.cal.emoji.dining", "🍜"));
         dto.setCalEmojiDiary(m.getOrDefault("layout.cal.emoji.diary", "📝"));
+        dto.setCalLabelCooking(m.getOrDefault("layout.cal.label.cooking", "做饭"));
+        dto.setCalLabelDining(m.getOrDefault("layout.cal.label.dining", "下馆子"));
+        dto.setCalLabelDiary(m.getOrDefault("layout.cal.label.diary", "日记"));
         return dto;
     }
 
@@ -111,6 +114,9 @@ public class TenantConfigServiceImpl implements TenantConfigService {
         if (dto.getCalEmojiCooking() != null)  setConfig(tenantId, "layout.cal.emoji.cooking",   dto.getCalEmojiCooking());
         if (dto.getCalEmojiDining() != null)   setConfig(tenantId, "layout.cal.emoji.dining",    dto.getCalEmojiDining());
         if (dto.getCalEmojiDiary() != null)    setConfig(tenantId, "layout.cal.emoji.diary",     dto.getCalEmojiDiary());
+        if (dto.getCalLabelCooking() != null)  setConfig(tenantId, "layout.cal.label.cooking",   dto.getCalLabelCooking());
+        if (dto.getCalLabelDining() != null)   setConfig(tenantId, "layout.cal.label.dining",    dto.getCalLabelDining());
+        if (dto.getCalLabelDiary() != null)    setConfig(tenantId, "layout.cal.label.diary",     dto.getCalLabelDiary());
     }
 
     @Override
