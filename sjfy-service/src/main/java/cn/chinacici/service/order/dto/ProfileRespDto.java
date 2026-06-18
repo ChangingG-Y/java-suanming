@@ -8,6 +8,8 @@ public class ProfileRespDto {
     private String avatarUrl;
     private BigDecimal height;
     private String bio;
+    private String birthday;
+    private String bannerUrl;
     private BigDecimal currentWeight;
     private String currentWeightDate;
 
@@ -25,6 +27,12 @@ public class ProfileRespDto {
 
     public String getBio() { return bio; }
     public void setBio(String bio) { this.bio = bio; }
+
+    public String getBirthday() { return birthday; }
+    public void setBirthday(String birthday) { this.birthday = birthday; }
+
+    public String getBannerUrl() { return bannerUrl; }
+    public void setBannerUrl(String bannerUrl) { this.bannerUrl = bannerUrl; }
 
     public BigDecimal getCurrentWeight() { return currentWeight; }
     public void setCurrentWeight(BigDecimal currentWeight) { this.currentWeight = currentWeight; }

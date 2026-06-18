@@ -111,9 +111,13 @@ public class ProfileServiceImpl implements ProfileService {
         if (user.getAvatarFileId() != null) {
             dto.setAvatarUrl("/api/order/file/" + user.getAvatarFileId() + "/thumbnail");
         }
+        if (user.getBannerFileId() != null) {
+            dto.setBannerUrl("/api/order/file/" + user.getBannerFileId() + "/thumbnail");
+        }
         if (profile != null) {
             dto.setHeight(profile.getHeight());
             dto.setBio(profile.getBio());
+            dto.setBirthday(profile.getBirthday());
         }
         if (latestWeight != null) {
             dto.setCurrentWeight(latestWeight.getWeight());
@@ -147,6 +151,7 @@ public class ProfileServiceImpl implements ProfileService {
             profile.setUpdatedAt(now);
             if (dto.getHeight() != null) profile.setHeight(dto.getHeight());
             if (dto.getBio() != null) profile.setBio(dto.getBio());
+            if (dto.getBirthday() != null) profile.setBirthday(dto.getBirthday());
             profileMapper.insert(profile);
         } else {
             LambdaUpdateWrapper<LoUserProfile> uw = new LambdaUpdateWrapper<LoUserProfile>()
@@ -154,6 +159,7 @@ public class ProfileServiceImpl implements ProfileService {
                 .set(LoUserProfile::getUpdatedAt, now);
             if (dto.getHeight() != null) uw.set(LoUserProfile::getHeight, dto.getHeight());
             if (dto.getBio() != null) uw.set(LoUserProfile::getBio, dto.getBio());
+            if (dto.getBirthday() != null) uw.set(LoUserProfile::getBirthday, dto.getBirthday());
             profileMapper.update(null, uw);
         }
     }
@@ -164,6 +170,16 @@ public class ProfileServiceImpl implements ProfileService {
         LambdaUpdateWrapper<LoUser> uw = new LambdaUpdateWrapper<LoUser>()
             .eq(LoUser::getId, userId)
             .set(LoUser::getAvatarFileId, fileId)
+            .set(LoUser::getUpdatedAt, now);
+        userMapper.update(null, uw);
+    }
+
+    @Override
+    public void updateBanner(Integer userId, Integer fileId) {
+        int now = (int) (System.currentTimeMillis() / 1000);
+        LambdaUpdateWrapper<LoUser> uw = new LambdaUpdateWrapper<LoUser>()
+            .eq(LoUser::getId, userId)
+            .set(LoUser::getBannerFileId, fileId)
             .set(LoUser::getUpdatedAt, now);
         userMapper.update(null, uw);
     }
@@ -306,10 +322,20 @@ public class ProfileServiceImpl implements ProfileService {
     public Map<String, Object> getDayDetail(Integer userId, Integer tenantId, String date) {
         LocalDate localDate = LocalDate.parse(date);
 
+        // 获取租户内所有用户ID，订单以整个租户为维度（情侣看到同样的做饭记录）
+        List<Integer> tenantUserIds = userMapper.selectList(
+            new LambdaQueryWrapper<LoUser>()
+                .eq(LoUser::getTenantId, tenantId)
+                .eq(LoUser::getIsDeleted, 0)
+                .select(LoUser::getId)
+        ).stream().map(LoUser::getId).collect(Collectors.toList());
+        if (tenantUserIds.isEmpty()) tenantUserIds = List.of(userId);
+
+        // 订单：整个租户当天所有订单（双方共享，谁做饭都算）
         List<LoOrder> orders = orderMapper.selectList(
             new LambdaQueryWrapper<LoOrder>()
                 .eq(LoOrder::getTenantId, tenantId)
-                .eq(LoOrder::getUserId, userId)
+                .in(LoOrder::getUserId, tenantUserIds)
                 .eq(LoOrder::getIsDeleted, 0)
                 .eq(LoOrder::getOrderDate, localDate)
                 .orderByAsc(LoOrder::getMealType)
@@ -360,71 +386,62 @@ public class ProfileServiceImpl implements ProfileService {
             orderList.add(om);
         }
 
+        // 体重：请求者自己的（个人数据，各自独立）
         LoWeightRecord wr = weightMapper.selectOne(
             new LambdaQueryWrapper<LoWeightRecord>()
                 .eq(LoWeightRecord::getUserId, userId)
                 .eq(LoWeightRecord::getRecordDate, date)
         );
 
-        // restaurant visits
-        List<RestaurantVisitDto> visitDtos = lifeRecordService.getVisitsByDate(userId, date);
-        List<Map<String, Object>> visitList = new ArrayList<>();
-        for (RestaurantVisitDto v : visitDtos) {
-            Map<String, Object> vm = new LinkedHashMap<>();
-            vm.put("id", v.getId());
-            vm.put("mealType", v.getMealType());
-            vm.put("mealTypeName", getMealTypeName(v.getMealType()));
-            vm.put("restaurantName", v.getRestaurantName());
-            vm.put("score", v.getScore());
-            vm.put("content", v.getContent());
-            vm.put("imageUrls", v.getImageUrls() != null ? v.getImageUrls() : List.of());
-            visitList.add(vm);
-        }
+        // 获取自己和伴侣信息
+        LoUser selfUser = userMapper.selectById(userId);
+        String myNickname = selfUser != null && selfUser.getNickname() != null ? selfUser.getNickname() : "我";
 
-        // diary
-        Object diaryData = null;
-        DiaryDto diaryDto = lifeRecordService.getDiaryByDate(userId, date);
-        if (diaryDto != null) {
-            Map<String, Object> dm = new LinkedHashMap<>();
-            dm.put("id", diaryDto.getId());
-            dm.put("content", diaryDto.getContent());
-            dm.put("imageUrls", diaryDto.getImageUrls() != null ? diaryDto.getImageUrls() : List.of());
-            diaryData = dm;
-        }
-
-        // 情侣共享记录：查询伴侣（同租户另一用户）的下馆子和日记，合并在详情中展示
         Integer partnerId = getPartnerId(userId, tenantId);
         String partnerNickname = null;
-        List<Map<String, Object>> partnerVisitList = new ArrayList<>();
-        Object partnerDiaryData = null;
         Object partnerWeightData = null;
+
+        // 下馆子打卡：合并自己和伴侣的记录，各带 isOwn 标记
+        List<Map<String, Object>> allVisits = new ArrayList<>();
+        for (RestaurantVisitDto v : lifeRecordService.getVisitsByDate(userId, date)) {
+            Map<String, Object> vm = buildVisitMap(v);
+            vm.put("isOwn", true);
+            vm.put("authorNickname", myNickname);
+            allVisits.add(vm);
+        }
+
+        // 日记：合并自己和伴侣的，各带 isOwn 标记（数组，支持双方各自写）
+        List<Map<String, Object>> allDiaries = new ArrayList<>();
+        DiaryDto myDiary = lifeRecordService.getDiaryByDate(userId, date);
+        if (myDiary != null) {
+            Map<String, Object> dm = buildDiaryMap(myDiary);
+            dm.put("isOwn", true);
+            dm.put("authorNickname", myNickname);
+            allDiaries.add(dm);
+        }
 
         if (partnerId != null) {
             LoUser partnerUser = userMapper.selectById(partnerId);
-            partnerNickname = partnerUser != null ? partnerUser.getNickname() : "TA";
+            partnerNickname = partnerUser != null && partnerUser.getNickname() != null ? partnerUser.getNickname() : "TA";
 
-            List<RestaurantVisitDto> partnerVisitDtos = lifeRecordService.getVisitsByDate(partnerId, date);
-            for (RestaurantVisitDto v : partnerVisitDtos) {
-                Map<String, Object> vm = new LinkedHashMap<>();
-                vm.put("id", v.getId());
-                vm.put("mealType", v.getMealType());
-                vm.put("mealTypeName", getMealTypeName(v.getMealType()));
-                vm.put("restaurantName", v.getRestaurantName());
-                vm.put("score", v.getScore());
-                vm.put("content", v.getContent());
-                vm.put("imageUrls", v.getImageUrls() != null ? v.getImageUrls() : List.of());
-                partnerVisitList.add(vm);
+            // 伴侣的下馆子打卡追加到列表末尾
+            for (RestaurantVisitDto v : lifeRecordService.getVisitsByDate(partnerId, date)) {
+                Map<String, Object> vm = buildVisitMap(v);
+                vm.put("isOwn", false);
+                vm.put("authorNickname", partnerNickname);
+                allVisits.add(vm);
             }
 
+            // 伴侣的日记追加到列表末尾
             DiaryDto partnerDiary = lifeRecordService.getDiaryByDate(partnerId, date);
             if (partnerDiary != null) {
-                Map<String, Object> dm = new LinkedHashMap<>();
-                dm.put("id", partnerDiary.getId());
-                dm.put("content", partnerDiary.getContent());
-                dm.put("imageUrls", partnerDiary.getImageUrls() != null ? partnerDiary.getImageUrls() : List.of());
-                partnerDiaryData = dm;
+                Map<String, Object> dm = buildDiaryMap(partnerDiary);
+                dm.put("isOwn", false);
+                dm.put("authorNickname", partnerNickname);
+                allDiaries.add(dm);
             }
 
+            // 伴侣体重（用于并排展示）
             LoWeightRecord partnerWr = weightMapper.selectOne(
                 new LambdaQueryWrapper<LoWeightRecord>()
                     .eq(LoWeightRecord::getUserId, partnerId)
@@ -436,16 +453,38 @@ public class ProfileServiceImpl implements ProfileService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("date", date);
         result.put("orders", orderList);
-        result.put("visits", visitList);
-        result.put("diary", diaryData);
+        // 下馆子和日记以合并列表返回，前端用 isOwn 区分操作权限
+        result.put("allVisits", allVisits);
+        result.put("allDiaries", allDiaries);
+        // 体重：自己的（weight）+ 伴侣的（partnerWeight），并排展示
         result.put("weight", wr != null ? wr.getWeight() : null);
         result.put("weightNote", wr != null ? wr.getNote() : null);
-        // 伴侣记录（用于前端展示双方数据）
+        result.put("myNickname", myNickname);
         result.put("partnerNickname", partnerNickname);
-        result.put("partnerVisits", partnerVisitList);
-        result.put("partnerDiary", partnerDiaryData);
         result.put("partnerWeight", partnerWeightData);
         return result;
+    }
+
+    /** 构建下馆子打卡 Map（不含 isOwn/authorNickname，由调用方追加） */
+    private Map<String, Object> buildVisitMap(RestaurantVisitDto v) {
+        Map<String, Object> vm = new LinkedHashMap<>();
+        vm.put("id", v.getId());
+        vm.put("mealType", v.getMealType());
+        vm.put("mealTypeName", getMealTypeName(v.getMealType()));
+        vm.put("restaurantName", v.getRestaurantName());
+        vm.put("score", v.getScore());
+        vm.put("content", v.getContent());
+        vm.put("imageUrls", v.getImageUrls() != null ? v.getImageUrls() : List.of());
+        return vm;
+    }
+
+    /** 构建日记 Map（不含 isOwn/authorNickname，由调用方追加） */
+    private Map<String, Object> buildDiaryMap(DiaryDto d) {
+        Map<String, Object> dm = new LinkedHashMap<>();
+        dm.put("id", d.getId());
+        dm.put("content", d.getContent());
+        dm.put("imageUrls", d.getImageUrls() != null ? d.getImageUrls() : List.of());
+        return dm;
     }
 
     @Override

@@ -12,6 +12,8 @@ public class LoUserProfile {
     private Integer tenantId;
     private java.math.BigDecimal height;
     private String bio;
+    /** 生日，格式 YYYY-MM-DD，用于日历年度高亮 */
+    private String birthday;
     private Integer createdAt;
     private Integer updatedAt;
 
@@ -29,6 +31,9 @@ public class LoUserProfile {
 
     public String getBio() { return bio; }
     public void setBio(String bio) { this.bio = bio; }
+
+    public String getBirthday() { return birthday; }
+    public void setBirthday(String birthday) { this.birthday = birthday; }
 
     public Integer getCreatedAt() { return createdAt; }
     public void setCreatedAt(Integer createdAt) { this.createdAt = createdAt; }

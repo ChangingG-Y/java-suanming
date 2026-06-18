@@ -15,6 +15,8 @@ public interface ProfileService {
 
     void updateAvatar(Integer userId, Integer fileId);
 
+    void updateBanner(Integer userId, Integer fileId);
+
     List<WeightRecordDto> getWeightRecords(Integer userId, int days);
 
     void saveWeightRecord(Integer userId, Integer tenantId, WeightRecordDto dto);

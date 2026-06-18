@@ -62,6 +62,15 @@ public class ProfileController {
         return ResponseData.success((Object) resp.getThumbnailUrl());
     }
 
+    @PostMapping("/banner")
+    public ResponseData<String> uploadBanner(@RequestHeader("Authorization") String auth,
+                                             @RequestParam("file") MultipartFile file) {
+        SessionDto session = userOrderService.getSession(auth);
+        var resp = fileOrderService.upload(file, session.getUserId(), "dish");
+        profileService.updateBanner(session.getUserId(), resp.getId());
+        return ResponseData.success((Object) resp.getThumbnailUrl());
+    }
+
     @GetMapping("/weight")
     public ResponseData<List<WeightRecordDto>> getWeightRecords(
             @RequestHeader("Authorization") String auth,

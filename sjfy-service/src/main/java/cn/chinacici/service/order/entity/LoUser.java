@@ -14,6 +14,7 @@ public class LoUser {
     private Integer role;
     private String nickname;
     private Integer avatarFileId;
+    private Integer bannerFileId;
     private Integer isDeleted;
     private String createBy;
     private String updateBy;
@@ -40,6 +41,9 @@ public class LoUser {
 
     public Integer getAvatarFileId() { return avatarFileId; }
     public void setAvatarFileId(Integer avatarFileId) { this.avatarFileId = avatarFileId; }
+
+    public Integer getBannerFileId() { return bannerFileId; }
+    public void setBannerFileId(Integer bannerFileId) { this.bannerFileId = bannerFileId; }
 
     public Integer getIsDeleted() { return isDeleted; }
     public void setIsDeleted(Integer isDeleted) { this.isDeleted = isDeleted; }
