@@ -107,12 +107,13 @@ public class ProfileController {
         );
     }
 
-    // ===== Admin can also view partner's data =====
+    // ===== Both admin and regular user can view partner's data =====
+    // In this couple app, any authenticated user can peek at their partner
 
     @GetMapping("/partner")
     public ResponseData<ProfileRespDto> getPartnerProfile(@RequestHeader("Authorization") String auth) {
-        SessionDto admin = userOrderService.requireAdmin(auth);
-        Integer partnerId = profileService.getPartnerId(admin.getUserId(), admin.getTenantId());
+        SessionDto session = userOrderService.getSession(auth);
+        Integer partnerId = profileService.getPartnerId(session.getUserId(), session.getTenantId());
         if (partnerId == null) return ResponseData.success(null);
         return ResponseData.success(profileService.getProfile(partnerId));
     }
@@ -121,8 +122,8 @@ public class ProfileController {
     public ResponseData<List<WeightRecordDto>> getPartnerWeight(
             @RequestHeader("Authorization") String auth,
             @RequestParam(defaultValue = "90") int days) {
-        SessionDto admin = userOrderService.requireAdmin(auth);
-        Integer partnerId = profileService.getPartnerId(admin.getUserId(), admin.getTenantId());
+        SessionDto session = userOrderService.getSession(auth);
+        Integer partnerId = profileService.getPartnerId(session.getUserId(), session.getTenantId());
         if (partnerId == null) return ResponseData.success(List.of());
         return ResponseData.success(profileService.getWeightRecords(partnerId, days));
     }
@@ -132,11 +133,11 @@ public class ProfileController {
             @RequestHeader("Authorization") String auth,
             @RequestParam int year,
             @RequestParam int month) {
-        SessionDto admin = userOrderService.requireAdmin(auth);
-        Integer partnerId = profileService.getPartnerId(admin.getUserId(), admin.getTenantId());
+        SessionDto session = userOrderService.getSession(auth);
+        Integer partnerId = profileService.getPartnerId(session.getUserId(), session.getTenantId());
         if (partnerId == null) return ResponseData.success(List.of());
         return ResponseData.success(
-            profileService.getCalendar(partnerId, admin.getTenantId(), year, month)
+            profileService.getCalendar(partnerId, session.getTenantId(), year, month)
         );
     }
 
@@ -144,11 +145,11 @@ public class ProfileController {
     public ResponseData<Map<String, Object>> getPartnerDayDetail(
             @RequestHeader("Authorization") String auth,
             @RequestParam String date) {
-        SessionDto admin = userOrderService.requireAdmin(auth);
-        Integer partnerId = profileService.getPartnerId(admin.getUserId(), admin.getTenantId());
+        SessionDto session = userOrderService.getSession(auth);
+        Integer partnerId = profileService.getPartnerId(session.getUserId(), session.getTenantId());
         if (partnerId == null) return ResponseData.success(Map.of());
         return ResponseData.success(
-            profileService.getDayDetail(partnerId, admin.getTenantId(), date)
+            profileService.getDayDetail(partnerId, session.getTenantId(), date)
         );
     }
 }

@@ -65,7 +65,7 @@ public class FileOrderController {
         if (loFile == null) return ResponseEntity.notFound().build();
         String relativePath = thumbnail ? loFile.getThumbnailPath() : loFile.getFilePath();
         if (relativePath == null || relativePath.isEmpty()) return ResponseEntity.notFound().build();
-        File f = new File(uploadProperties.getBaseDir(), relativePath);
+        File f = new File(new File(uploadProperties.getBaseDir()).getAbsoluteFile(), relativePath);
         if (!f.exists()) return ResponseEntity.notFound().build();
         byte[] bytes = Files.readAllBytes(f.toPath());
         MediaType mediaType = determineMediaType(loFile.getContentType(), thumbnail);

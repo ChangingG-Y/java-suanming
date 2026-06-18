@@ -233,10 +233,20 @@ public class ProfileServiceImpl implements ProfileService {
         String fromDate = ym.atDay(1).toString();
         String toDate = ym.atEndOfMonth().toString();
 
+        // 情侣共享日历：同一租户所有用户的打卡/日记/下馆子标记合并显示，让双方看到同样的日历
+        List<Integer> tenantUserIds = userMapper.selectList(
+            new LambdaQueryWrapper<LoUser>()
+                .eq(LoUser::getTenantId, tenantId)
+                .eq(LoUser::getIsDeleted, 0)
+                .select(LoUser::getId)
+        ).stream().map(LoUser::getId).collect(Collectors.toList());
+        if (tenantUserIds.isEmpty()) tenantUserIds = List.of(userId);
+
+        // 食堂订单：租户内所有用户的订单（显示是否有人做饭/点饭）
         List<LoOrder> orders = orderMapper.selectList(
             new LambdaQueryWrapper<LoOrder>()
                 .eq(LoOrder::getTenantId, tenantId)
-                .eq(LoOrder::getUserId, userId)
+                .in(LoOrder::getUserId, tenantUserIds)
                 .eq(LoOrder::getIsDeleted, 0)
                 .ge(LoOrder::getOrderDate, LocalDate.parse(fromDate))
                 .le(LoOrder::getOrderDate, LocalDate.parse(toDate))
@@ -245,6 +255,7 @@ public class ProfileServiceImpl implements ProfileService {
             .map(o -> o.getOrderDate().toString())
             .collect(Collectors.toSet());
 
+        // 体重：仍然只显示请求者自己的体重（个人指标）
         List<LoWeightRecord> weights = weightMapper.selectList(
             new LambdaQueryWrapper<LoWeightRecord>()
                 .eq(LoWeightRecord::getUserId, userId)
@@ -256,18 +267,20 @@ public class ProfileServiceImpl implements ProfileService {
             weightMap.put(w.getRecordDate(), w.getWeight());
         }
 
+        // 下馆子：租户内任意用户有记录即标记
         List<LoRestaurantVisit> visits = visitMapper.selectList(
             new LambdaQueryWrapper<LoRestaurantVisit>()
-                .eq(LoRestaurantVisit::getUserId, userId)
+                .in(LoRestaurantVisit::getUserId, tenantUserIds)
                 .ge(LoRestaurantVisit::getVisitDate, fromDate)
                 .le(LoRestaurantVisit::getVisitDate, toDate)
                 .select(LoRestaurantVisit::getVisitDate)
         );
         Set<String> visitDates = visits.stream().map(LoRestaurantVisit::getVisitDate).collect(Collectors.toSet());
 
+        // 日记：租户内任意用户有日记即标记
         List<LoDiary> diaries = diaryMapper.selectList(
             new LambdaQueryWrapper<LoDiary>()
-                .eq(LoDiary::getUserId, userId)
+                .in(LoDiary::getUserId, tenantUserIds)
                 .ge(LoDiary::getDiaryDate, fromDate)
                 .le(LoDiary::getDiaryDate, toDate)
                 .select(LoDiary::getDiaryDate)
@@ -379,6 +392,47 @@ public class ProfileServiceImpl implements ProfileService {
             diaryData = dm;
         }
 
+        // 情侣共享记录：查询伴侣（同租户另一用户）的下馆子和日记，合并在详情中展示
+        Integer partnerId = getPartnerId(userId, tenantId);
+        String partnerNickname = null;
+        List<Map<String, Object>> partnerVisitList = new ArrayList<>();
+        Object partnerDiaryData = null;
+        Object partnerWeightData = null;
+
+        if (partnerId != null) {
+            LoUser partnerUser = userMapper.selectById(partnerId);
+            partnerNickname = partnerUser != null ? partnerUser.getNickname() : "TA";
+
+            List<RestaurantVisitDto> partnerVisitDtos = lifeRecordService.getVisitsByDate(partnerId, date);
+            for (RestaurantVisitDto v : partnerVisitDtos) {
+                Map<String, Object> vm = new LinkedHashMap<>();
+                vm.put("id", v.getId());
+                vm.put("mealType", v.getMealType());
+                vm.put("mealTypeName", getMealTypeName(v.getMealType()));
+                vm.put("restaurantName", v.getRestaurantName());
+                vm.put("score", v.getScore());
+                vm.put("content", v.getContent());
+                vm.put("imageUrls", v.getImageUrls() != null ? v.getImageUrls() : List.of());
+                partnerVisitList.add(vm);
+            }
+
+            DiaryDto partnerDiary = lifeRecordService.getDiaryByDate(partnerId, date);
+            if (partnerDiary != null) {
+                Map<String, Object> dm = new LinkedHashMap<>();
+                dm.put("id", partnerDiary.getId());
+                dm.put("content", partnerDiary.getContent());
+                dm.put("imageUrls", partnerDiary.getImageUrls() != null ? partnerDiary.getImageUrls() : List.of());
+                partnerDiaryData = dm;
+            }
+
+            LoWeightRecord partnerWr = weightMapper.selectOne(
+                new LambdaQueryWrapper<LoWeightRecord>()
+                    .eq(LoWeightRecord::getUserId, partnerId)
+                    .eq(LoWeightRecord::getRecordDate, date)
+            );
+            partnerWeightData = partnerWr != null ? partnerWr.getWeight() : null;
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("date", date);
         result.put("orders", orderList);
@@ -386,6 +440,11 @@ public class ProfileServiceImpl implements ProfileService {
         result.put("diary", diaryData);
         result.put("weight", wr != null ? wr.getWeight() : null);
         result.put("weightNote", wr != null ? wr.getNote() : null);
+        // 伴侣记录（用于前端展示双方数据）
+        result.put("partnerNickname", partnerNickname);
+        result.put("partnerVisits", partnerVisitList);
+        result.put("partnerDiary", partnerDiaryData);
+        result.put("partnerWeight", partnerWeightData);
         return result;
     }
 

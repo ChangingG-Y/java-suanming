@@ -48,7 +48,7 @@ public class FileOrderServiceImpl implements FileOrderService {
         String uuid = UUID.randomUUID().toString().replace("-", "");
         String ext = getExt(file.getOriginalFilename(), contentType);
 
-        File baseDirFile = new File(baseDir);
+        File baseDirFile = new File(baseDir).getAbsoluteFile();
         String relFilePath;
         String relThumbPath = "thumbnails/" + dateDir + "/" + uuid + "_thumb.jpg";
         File destThumb = new File(baseDirFile, relThumbPath);
