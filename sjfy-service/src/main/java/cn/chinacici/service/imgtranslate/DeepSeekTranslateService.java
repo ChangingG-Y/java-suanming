@@ -48,22 +48,28 @@ public class DeepSeekTranslateService {
         this.restTemplate = new RestTemplate(factory);
     }
 
+    private static final int MAX_INSTRUCTION_LENGTH = 500;
+
     /**
-     * @param lines  OCR 识别出的原文行，按原顺序
-     * @param apiKey 用户自己填写的 DeepSeek API Key
-     * @param model  可选，不传用默认模型
+     * @param lines       OCR 识别出的原文行，按原顺序
+     * @param apiKey      用户自己填写的 DeepSeek API Key
+     * @param model       可选，不传用默认模型
+     * @param instruction 可选，用户对本次翻译的额外要求/修正说明，比如指出某个词翻译错了
      * @return 与 lines 等长、一一对应的翻译结果；不需要翻译的（型号/纯数字/品牌名等）原样返回
      */
-    public List<String> translate(List<OcrLine> lines, String apiKey, String model) {
+    public List<String> translate(List<OcrLine> lines, String apiKey, String model, String instruction) {
         if (!StringUtils.hasText(apiKey)) {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "请先填写 DeepSeek API Key");
         }
         if (lines.isEmpty()) {
             return new ArrayList<>();
         }
+        if (instruction != null && instruction.length() > MAX_INSTRUCTION_LENGTH) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "翻译要求太长，请精简后再试");
+        }
 
         String usedModel = StringUtils.hasText(model) ? model.trim() : properties.getDefaultModel();
-        String requestBody = buildRequestBody(lines, usedModel);
+        String requestBody = buildRequestBody(lines, usedModel, instruction);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -87,7 +93,7 @@ public class DeepSeekTranslateService {
         }
     }
 
-    private String buildRequestBody(List<OcrLine> lines, String model) {
+    private String buildRequestBody(List<OcrLine> lines, String model, String instruction) {
         List<String> originalTexts = new ArrayList<>();
         for (OcrLine line : lines) {
             originalTexts.add(line.getText());
@@ -105,6 +111,9 @@ public class DeepSeekTranslateService {
                 + "2) 表头、标题、说明文字、段落——翻译成简体中文，语气自然、专业；"
                 + "3) 无法判断或看起来是噪声(单个符号/乱码)的，原样返回；"
                 + "4) 只输出 JSON 数组本身，不要任何解释文字，不要用 markdown 代码块包裹。";
+        if (StringUtils.hasText(instruction)) {
+            systemPrompt += "\n\n用户对本次翻译的额外要求（优先按这个来，可能是纠正上一次的翻译错误）：\n" + instruction.trim();
+        }
 
         Map<String, Object> systemMessage = new HashMap<>();
         systemMessage.put("role", "system");
