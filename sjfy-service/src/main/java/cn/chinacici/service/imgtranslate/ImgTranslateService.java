@@ -176,6 +176,19 @@ public class ImgTranslateService {
         return task.getSourceFile();
     }
 
+    /** 复核阶段用户手动挑一行、单独问一次 AI 要翻译建议（比如 AI 判断跳过但用户觉得该翻的内容）。 */
+    public String suggestTranslation(String taskId, int index, String apiKey, String model, String instruction) {
+        TranslateTask task = getTask(taskId);
+        if (task.getStatus() != TranslateTask.Status.REVIEW) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "任务当前不在待确认状态");
+        }
+        List<OcrLine> lines = task.getLines();
+        if (index < 0 || index >= lines.size()) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "行下标越界");
+        }
+        return translateService.suggestOne(lines.get(index).getText(), apiKey, model, instruction);
+    }
+
     /** 用户确认（可能改过部分译文）后，异步做最终擦字重画。 */
     public void confirmAndRender(String taskId, List<String> editedTranslations) {
         TranslateTask task = getTask(taskId);

@@ -71,7 +71,37 @@ public class DeepSeekTranslateService {
 
         String usedModel = StringUtils.hasText(model) ? model.trim() : properties.getDefaultModel();
         String requestBody = buildRequestBody(lines, usedModel, instruction);
+        String responseBody = callChatCompletion(requestBody, apiKey);
+        return parseTranslations(responseBody, lines.size());
+    }
 
+    /**
+     * 复核阶段用户手动挑一行（比如 AI 判断跳过、但用户觉得应该翻译的内容），
+     * 单独问一次 DeepSeek 要一个翻译建议，不用用户自己想。
+     *
+     * @param text        用户挑中的这一行 OCR 原文
+     * @param instruction 可选，用户对这一条的补充说明（比如"这是多孔砖的意思"）
+     * @return 翻译建议；原文本身就不需要翻译（型号/编码等）会原样返回
+     */
+    public String suggestOne(String text, String apiKey, String model, String instruction) {
+        if (!StringUtils.hasText(apiKey)) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "请先填写 DeepSeek API Key");
+        }
+        if (!StringUtils.hasText(text)) {
+            return "";
+        }
+        if (instruction != null && instruction.length() > MAX_INSTRUCTION_LENGTH) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "翻译要求太长，请精简后再试");
+        }
+
+        String usedModel = StringUtils.hasText(model) ? model.trim() : properties.getDefaultModel();
+        String requestBody = buildSuggestRequestBody(text, usedModel, instruction);
+        String responseBody = callChatCompletion(requestBody, apiKey);
+        String content = extractContent(responseBody);
+        return stripSurroundingQuotes(content.trim());
+    }
+
+    private String callChatCompletion(String requestBody, String apiKey) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(apiKey.trim());
@@ -79,7 +109,7 @@ public class DeepSeekTranslateService {
         try {
             String url = trimTrailingSlash(properties.getDeepseekBaseUrl()) + "/chat/completions";
             ResponseEntity<String> response = restTemplate.postForEntity(url, new HttpEntity<>(requestBody, headers), String.class);
-            return parseTranslations(response.getBody(), lines.size());
+            return response.getBody();
         } catch (HttpStatusCodeException e) {
             log.warn("DeepSeek 调用失败，status={}, body={}", e.getRawStatusCode(), e.getResponseBodyAsString());
             if (e.getRawStatusCode() == 401) {
@@ -160,6 +190,55 @@ public class DeepSeekTranslateService {
         }
     }
 
+    private String buildSuggestRequestBody(String text, String model, String instruction) {
+        String systemPrompt = "你是专业的图片本地化翻译助手。用户从图片里手动挑出了一处 OCR 识别出的文字，"
+                + "希望你给出一个自然、专业的简体中文翻译建议——这段文字通常来自产品目录/宣传册，"
+                + "可能是产品类别、材质、专业术语。如果原文其实是型号/编码/纯数字/品牌名/网址/邮箱/电话号码，"
+                + "直接原样输出、不要翻译；其它情况给出最自然的简体中文翻译。"
+                + "只输出结果本身，不要输出任何解释、引号或多余文字。";
+        if (StringUtils.hasText(instruction)) {
+            systemPrompt += "\n\n用户的补充说明（优先参考）：" + instruction.trim();
+        }
+
+        Map<String, Object> systemMessage = new HashMap<>();
+        systemMessage.put("role", "system");
+        systemMessage.put("content", systemPrompt);
+
+        Map<String, Object> userMessage = new HashMap<>();
+        userMessage.put("role", "user");
+        userMessage.put("content", "原文：" + text);
+
+        List<Object> messages = new ArrayList<>();
+        messages.add(systemMessage);
+        messages.add(userMessage);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("model", model);
+        body.put("messages", messages);
+        body.put("stream", false);
+        body.put("temperature", 0.3);
+
+        try {
+            return objectMapper.writeValueAsString(body);
+        } catch (Exception e) {
+            throw new ServiceException(ResultCode.UNKNOWN_ERROR, "请求体序列化失败");
+        }
+    }
+
+    private String stripSurroundingQuotes(String s) {
+        if (s.length() >= 2) {
+            char first = s.charAt(0);
+            char last = s.charAt(s.length() - 1);
+            boolean quoted = (first == '"' && last == '"')
+                    || (first == '“' && last == '”')
+                    || (first == '\'' && last == '\'');
+            if (quoted) {
+                return s.substring(1, s.length() - 1).trim();
+            }
+        }
+        return s;
+    }
+
     /**
      * 按 y0 接近程度把 OCR 行聚成"视觉行"（大概率对应表格的一行），组内按 x0 从左到右排序。
      * {@code lines} 调用方传入时已经是按 (y0, x0) 排过序的，这里只需要顺序扫描、
@@ -199,7 +278,7 @@ public class DeepSeekTranslateService {
         return rows;
     }
 
-    private List<String> parseTranslations(String responseBody, int expectedSize) {
+    private String extractContent(String responseBody) {
         if (!StringUtils.hasText(responseBody)) {
             throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 返回为空");
         }
@@ -220,7 +299,11 @@ public class DeepSeekTranslateService {
         if (!StringUtils.hasText(content)) {
             throw new ServiceException(ResultCode.UNKNOWN_ERROR, "DeepSeek 返回内容为空");
         }
+        return content;
+    }
 
+    private List<String> parseTranslations(String responseBody, int expectedSize) {
+        String content = extractContent(responseBody);
         Matcher matcher = JSON_ARRAY_PATTERN.matcher(content);
         String jsonArrayText = matcher.find() ? matcher.group() : content.trim();
 

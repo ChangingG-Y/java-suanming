@@ -13,10 +13,10 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,6 +34,14 @@ public class ImageRedrawService {
     private static final int ANOMALY_HEIGHT_CAP = 48;
     private static final int PAD_X = 6;
     private static final int PAD_Y = 4;
+    /** 单行最小可读字号；低于这个大小就宁可换成两行，也不要把字缩到看不清。 */
+    private static final int MIN_SINGLE_LINE_SIZE = 14;
+    /**
+     * 换成两行时，允许擦除+绘制区域比原框高出的倍数上限。人工改的译文/AI 补充翻译的译文
+     * 长度不可控，原框往往只有一行字的高度，两行必然要占用更多垂直空间；这个上限是为了
+     * 避免侵占相邻表格行——超过这个倍数宁可继续缩字号，也不再扩高。
+     */
+    private static final double MAX_HEIGHT_GROWTH_RATIO = 1.9;
 
     static {
         BIG_HEADERS.add("PROFESSIONAL TECHNOLOGY");
@@ -88,34 +96,93 @@ public class ImageRedrawService {
         Color bg = sampleBackground(image, x0, y0, x1, y1);
         Color fg = sampleTextColor(image, x0, y0, x1, y1, bg);
 
-        int bx0 = Math.max(0, x0 - PAD_X);
-        int by0 = Math.max(0, y0 - PAD_Y);
-        int bx1 = Math.min(image.getWidth(), x1 + PAD_X);
-        int by1 = Math.min(image.getHeight(), y1 + PAD_Y);
-
-        g.setColor(bg);
-        g.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
-
-        if (translated.isEmpty()) {
-            return;
-        }
-
         int maxH = line.height();
         if (maxH > ANOMALY_HEIGHT_THRESHOLD && !BIG_HEADERS.contains(line.getText().trim())) {
             maxH = ANOMALY_HEIGHT_CAP;
         }
         int maxW = (int) (line.width() * 1.4 + 40);
 
+        TextLayout layout = translated.isEmpty() ? null : fitLayout(g, translated, maxW, maxH);
+        // 人工改的译文/AI 补充翻译的长度不可控，一行放不下就换两行——两行需要的高度可能
+        // 超过原框，擦除区域按需要的高度扩展，以原框的垂直中心为基准对称扩，不然只扩下沿
+        // 会看起来文字往下坠、和原有排版对不上。
+        int neededHeight = layout != null ? layout.totalHeight : (y1 - y0);
+        int centerY = (y0 + y1) / 2;
+        int halfHeight = Math.max((y1 - y0) / 2, neededHeight / 2);
+
+        int bx0 = Math.max(0, x0 - PAD_X);
+        int bx1 = Math.min(image.getWidth(), x1 + PAD_X);
+        int by0 = Math.max(0, centerY - halfHeight - PAD_Y);
+        int by1 = Math.min(image.getHeight(), centerY + halfHeight + PAD_Y);
+
+        g.setColor(bg);
+        g.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+
+        if (translated.isEmpty() || layout == null) {
+            return;
+        }
+
         g.setColor(fg);
-        Font font = fitFont(g, translated, maxW, maxH);
-        g.setFont(font);
-        FontMetrics fm = g.getFontMetrics(font);
-        int textHeight = fm.getAscent() + fm.getDescent();
-        int drawY = y0 + (y1 - y0 - textHeight) / 2 + fm.getAscent();
-        g.drawString(translated, x0, drawY);
+        g.setFont(layout.font);
+        FontMetrics fm = g.getFontMetrics(layout.font);
+        int startY = centerY - layout.totalHeight / 2;
+        for (int i = 0; i < layout.lines.size(); i++) {
+            String ln = layout.lines.get(i);
+            int lineTop = startY + i * layout.lineHeight;
+            int tx = x0;
+            if (layout.lines.size() > 1) {
+                // 换行之后每行长度不一样，居中对齐比全部靠左看起来更自然
+                int lw = fm.stringWidth(ln);
+                tx = x0 + Math.max(0, (line.width() - lw) / 2);
+            }
+            g.drawString(ln, tx, lineTop + fm.getAscent());
+        }
     }
 
-    private Font fitFont(Graphics2D g, String text, int maxW, int maxH) {
+    /** 单行字体、单行/两行内容、行高：为了在换行时能一并算出擦除区域该扩多高。 */
+    private static final class TextLayout {
+        final Font font;
+        final List<String> lines;
+        final int lineHeight;
+        final int totalHeight;
+
+        TextLayout(Font font, List<String> lines, int lineHeight) {
+            this.font = font;
+            this.lines = lines;
+            this.lineHeight = lineHeight;
+            this.totalHeight = lineHeight * lines.size();
+        }
+    }
+
+    private TextLayout fitLayout(Graphics2D g, String text, int maxW, int maxH) {
+        // 1) 优先单行，字号不低于 MIN_SINGLE_LINE_SIZE，保证可读
+        for (int size = Math.max(MIN_SINGLE_LINE_SIZE, (int) (maxH * 0.95)); size >= MIN_SINGLE_LINE_SIZE; size--) {
+            Font font = loadBaseFont().deriveFont((float) size);
+            FontMetrics fm = g.getFontMetrics(font);
+            int w = fm.stringWidth(text);
+            int h = fm.getAscent() + fm.getDescent();
+            if (w <= maxW && h <= maxH * 1.35) {
+                return new TextLayout(font, Collections.singletonList(text), h);
+            }
+        }
+
+        // 2) 单行在可读字号内放不下，尝试换成两行，允许擦除/绘制区域适度增高
+        int maxHFor2Lines = (int) (maxH * MAX_HEIGHT_GROWTH_RATIO);
+        for (int size = Math.max(MIN_SINGLE_LINE_SIZE, (int) (maxH * 0.85)); size >= 10; size--) {
+            Font font = loadBaseFont().deriveFont((float) size);
+            FontMetrics fm = g.getFontMetrics(font);
+            String[] wrapped = wrapToTwoLines(fm, text);
+            if (wrapped.length < 2) {
+                continue; // 分不出两行（比如就一两个字），走兜底单行方案
+            }
+            int lineH = fm.getAscent() + fm.getDescent();
+            int totalH = lineH * 2;
+            if (Math.max(fm.stringWidth(wrapped[0]), fm.stringWidth(wrapped[1])) <= maxW && totalH <= maxHFor2Lines) {
+                return new TextLayout(font, java.util.Arrays.asList(wrapped), lineH);
+            }
+        }
+
+        // 3) 兜底：跟之前一样，单行一路缩到 8px，能塞多少塞多少，不再讲究好看
         int size = Math.max(10, (int) (maxH * 0.95));
         Font font = loadBaseFont().deriveFont((float) size);
         while (size > 8) {
@@ -124,11 +191,63 @@ public class ImageRedrawService {
             int w = fm.stringWidth(text);
             int h = fm.getAscent() + fm.getDescent();
             if (w <= maxW && h <= maxH * 1.35) {
-                return font;
+                break;
             }
             size--;
         }
-        return font;
+        FontMetrics fm = g.getFontMetrics(font);
+        return new TextLayout(font, Collections.singletonList(text), fm.getAscent() + fm.getDescent());
+    }
+
+    /**
+     * 把一段文字从中间附近断成两行，尽量让两行宽度接近。英文短语优先在空格处断
+     * （不然会把单词从中间切开，很难看）；中文没有天然词边界，就按字符宽度找
+     * 让两行差距最小的断点。
+     */
+    private String[] wrapToTwoLines(FontMetrics fm, String text) {
+        int n = text.length();
+        if (n < 2) {
+            return new String[]{text};
+        }
+        int mid = n / 2;
+        int radius = Math.max(1, n / 3);
+        int lo = Math.max(1, mid - radius);
+        int hi = Math.min(n - 1, mid + radius);
+
+        int spaceSplit = -1;
+        int spaceSplitDist = Integer.MAX_VALUE;
+        for (int i = lo; i <= hi; i++) {
+            if (text.charAt(i) == ' ') {
+                int dist = Math.abs(i - mid);
+                if (dist < spaceSplitDist) {
+                    spaceSplitDist = dist;
+                    spaceSplit = i;
+                }
+            }
+        }
+
+        int split;
+        if (spaceSplit >= 0) {
+            split = spaceSplit;
+        } else {
+            int bestSplit = mid;
+            int bestDiff = Integer.MAX_VALUE;
+            for (int i = lo; i <= hi; i++) {
+                int diff = Math.abs(fm.stringWidth(text.substring(0, i)) - fm.stringWidth(text.substring(i)));
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestSplit = i;
+                }
+            }
+            split = bestSplit;
+        }
+
+        String a = text.substring(0, split).trim();
+        String b = text.substring(split).trim();
+        if (a.isEmpty() || b.isEmpty()) {
+            return new String[]{text};
+        }
+        return new String[]{a, b};
     }
 
     private synchronized Font loadBaseFont() {

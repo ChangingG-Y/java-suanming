@@ -5,6 +5,7 @@ import cn.chinacici.core.ResultCode;
 import cn.chinacici.exception.ServiceException;
 import cn.chinacici.service.imgtranslate.ImgTranslateService;
 import cn.chinacici.service.imgtranslate.dto.PreviewLine;
+import cn.chinacici.service.imgtranslate.dto.SuggestRequest;
 import cn.chinacici.service.imgtranslate.dto.TranslateTask;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -35,6 +36,7 @@ import java.util.Map;
  *   <li>GET /status/{taskId} 前端轮询这个查进度，跑完 OCR+翻译后状态会变成 review</li>
  *   <li>GET /preview/{taskId} status=review 时调用，拿每行坐标 + 原文 + AI 建议译文</li>
  *   <li>GET /source/{taskId} status=review 时调用，拿原图（还没擦字重画）给用户核对位置</li>
+ *   <li>POST /suggest/{taskId} 用户手动挑一行，单独问 AI 要个翻译建议</li>
  *   <li>POST /confirm/{taskId} 用户看完/改完译文后调用，触发真正的擦字重画</li>
  *   <li>GET /download/{taskId} 重画完成（status=done）后下载结果图片</li>
  * </ol>
@@ -93,6 +95,19 @@ public class ImgTranslateController {
                 .contentType(mediaType)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(bytes);
+    }
+
+    /** 复核阶段用户手动挑一行，让 AI 单独给个翻译建议，不用自己想怎么翻。 */
+    @PostMapping("/suggest/{taskId}")
+    public ResponseData<Map<String, String>> suggest(
+            @PathVariable String taskId,
+            @RequestBody SuggestRequest req,
+            @RequestHeader("X-Deepseek-Api-Key") String apiKey
+    ) {
+        String translated = imgTranslateService.suggestTranslation(taskId, req.getIndex(), apiKey, req.getModel(), req.getInstruction());
+        Map<String, String> data = new HashMap<>();
+        data.put("translated", translated);
+        return ResponseData.success(data);
     }
 
     /** 请求体是一个 JSON 数组，跟 /preview 返回的行一一对应；某一项传 null/空字符串表示这一行保留原图不动。 */
