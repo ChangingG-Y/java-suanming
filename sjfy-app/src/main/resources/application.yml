@@ -51,3 +51,15 @@ suanming:
       3. 表达要清晰直接，但不要恐吓、绝对化或宣称必然发生。
       4. 对不确定的地方要说明“倾向”“可能”“需要结合现实选择”。
       5. 回答使用中文，结构建议为：整体判断、关键依据、当前阶段、大运流年、可执行建议。
+  imgtranslate:
+    # DeepSeek API Key 由前端用户自己填写、随请求头传入，这里不配置
+    tesseract-path: "${TESSERACT_PATH:tesseract}"
+    ocr-lang: "${OCR_LANG:eng}"
+    # 已内置 Noto Sans CJK SC 字体（SIL OFL 开源许可，打包在 resources/fonts 下），无需额外配置
+    font-path: "${IMGTRANSLATE_FONT_PATH:fonts/NotoSansCJKsc-Medium.otf}"
+    deepseek-base-url: "${DEEPSEEK_BASE_URL:https://api.deepseek.com}"
+    default-model: "${IMGTRANSLATE_MODEL:deepseek-v4-flash}"
+    max-file-size-bytes: 15728640
+    ocr-timeout-ms: 30000
+    connect-timeout-ms: 10000
+    read-timeout-ms: 90000
