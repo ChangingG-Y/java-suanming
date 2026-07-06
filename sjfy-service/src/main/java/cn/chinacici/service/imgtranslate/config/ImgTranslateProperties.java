@@ -39,6 +39,12 @@ public class ImgTranslateProperties {
     private int shortFragmentMaxLength = 3;
     /** 短碎片专用的置信度门槛（通常比 minOcrConfidence 更高，因为短文本更容易是巧合识别出的噪声） */
     private double shortFragmentMinConfidence = 75d;
+    /**
+     * 行内相邻单词最大间隙 / 行高 的倍数门槛。正常同一格/同一句内的词间距远小于字高，
+     * 超过这个倍数，大概率是 tesseract 把不同表格列/单元格的文字错误合并成了一行，
+     * 命中就跳过翻译和重画，保留原图不动，避免把跨列拼接出的错误内容画上去。
+     */
+    private double maxWordGapToHeightRatio = 3d;
 
     public String getTesseractPath() {
         return tesseractPath;
@@ -134,5 +140,13 @@ public class ImgTranslateProperties {
 
     public void setShortFragmentMinConfidence(double shortFragmentMinConfidence) {
         this.shortFragmentMinConfidence = shortFragmentMinConfidence;
+    }
+
+    public double getMaxWordGapToHeightRatio() {
+        return maxWordGapToHeightRatio;
+    }
+
+    public void setMaxWordGapToHeightRatio(double maxWordGapToHeightRatio) {
+        this.maxWordGapToHeightRatio = maxWordGapToHeightRatio;
     }
 }

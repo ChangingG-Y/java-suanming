@@ -109,7 +109,7 @@ public class ImgTranslateService {
                 int skipped = 0;
                 for (int i = 0; i < lines.size(); i++) {
                     OcrLine line = lines.get(i);
-                    if (isLikelyNoise(line)) {
+                    if (isLikelyNoise(line) || isLikelySplicedCells(line)) {
                         skipped++;
                         continue;
                     }
@@ -165,6 +165,20 @@ public class ImgTranslateService {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 判断一行是不是 tesseract 把不同表格列/单元格的文字错误拼接成了一行——
+     * 密集多栏表格上 {@code --psm 11} 常见的分段错误：把本该属于不同单元格的文字
+     * 归到同一个 (block, par, line)，行内会出现一段异常大的空白间隙（对应原本的列间距）。
+     * 命中就跳过翻译和重画，保留原图不动，比画出跨列拼接出的错误内容更安全。
+     */
+    private boolean isLikelySplicedCells(OcrLine line) {
+        int height = line.height();
+        if (height <= 0) {
+            return false;
+        }
+        return line.getMaxWordGap() > height * properties.getMaxWordGapToHeightRatio();
     }
 
     public TranslateTask getTask(String taskId) {

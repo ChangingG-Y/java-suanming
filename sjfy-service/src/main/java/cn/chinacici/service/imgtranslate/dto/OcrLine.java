@@ -9,14 +9,21 @@ public class OcrLine {
     private String text;
     /** tesseract 识别置信度（0~100），取行内所有单词置信度的平均值。 */
     private double confidence;
+    /**
+     * 行内相邻两个单词之间最大的水平间隙（像素）。正常同一格/同一句内的词间距很小，
+     * 如果某处间距异常大，大概率是 tesseract 把不同表格列/单元格的文字错误合并成了一行
+     * （--psm 11 在密集多栏表格上常见的分段错误），跨越了原本的空白列间距。
+     */
+    private int maxWordGap;
 
-    public OcrLine(int x0, int y0, int x1, int y1, String text, double confidence) {
+    public OcrLine(int x0, int y0, int x1, int y1, String text, double confidence, int maxWordGap) {
         this.x0 = x0;
         this.y0 = y0;
         this.x1 = x1;
         this.y1 = y1;
         this.text = text;
         this.confidence = confidence;
+        this.maxWordGap = maxWordGap;
     }
 
     public int getX0() {
@@ -49,5 +56,9 @@ public class OcrLine {
 
     public double getConfidence() {
         return confidence;
+    }
+
+    public int getMaxWordGap() {
+        return maxWordGap;
     }
 }

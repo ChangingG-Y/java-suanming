@@ -108,6 +108,8 @@ public class OcrService {
         Map<String, int[]> boxByKey = new LinkedHashMap<>();
         Map<String, StringBuilder> textByKey = new LinkedHashMap<>();
         Map<String, double[]> confByKey = new LinkedHashMap<>();
+        // 每个 key 对应行内所有单词的 [left, right]，用来在合并完成后算相邻单词间最大间隙
+        Map<String, List<int[]>> wordsByKey = new LinkedHashMap<>();
 
         for (int i = 1; i < tsvLines.size(); i++) {
             String row = tsvLines.get(i);
@@ -140,6 +142,9 @@ public class OcrService {
                     boxByKey.put(key, box);
                     textByKey.put(key, new StringBuilder(text));
                     confByKey.put(key, new double[]{conf, 1});
+                    List<int[]> words = new ArrayList<>();
+                    words.add(new int[]{left, left + width});
+                    wordsByKey.put(key, words);
                 } else {
                     box[0] = Math.min(box[0], left);
                     box[1] = Math.min(box[1], top);
@@ -149,6 +154,7 @@ public class OcrService {
                     double[] c = confByKey.get(key);
                     c[0] += conf;
                     c[1] += 1;
+                    wordsByKey.get(key).add(new int[]{left, left + width});
                 }
             } catch (NumberFormatException e) {
                 // 跳过解析异常的行
@@ -161,7 +167,8 @@ public class OcrService {
             String text = textByKey.get(entry.getKey()).toString();
             double[] c = confByKey.get(entry.getKey());
             double avgConf = c[1] > 0 ? c[0] / c[1] : 0;
-            lines.add(new OcrLine(box[0], box[1], box[2], box[3], text, avgConf));
+            int maxGap = computeMaxWordGap(wordsByKey.get(entry.getKey()));
+            lines.add(new OcrLine(box[0], box[1], box[2], box[3], text, avgConf, maxGap));
         }
         lines.sort((a, b) -> {
             if (a.getY0() != b.getY0()) {
@@ -170,5 +177,27 @@ public class OcrService {
             return Integer.compare(a.getX0(), b.getX0());
         });
         return lines;
+    }
+
+    /**
+     * 计算同一行内按左边缘排序后，相邻单词之间的最大水平间隙。
+     * tesseract 在密集多栏表格上（--psm 11）偶尔会把不同表格列/单元格的文字
+     * 错误合并成同一个 (block, par, line)，合并出的间隙会明显大于正常词间距，
+     * 这是后续判断"这行是不是跨单元格串行"的关键信号。
+     */
+    private int computeMaxWordGap(List<int[]> words) {
+        if (words == null || words.size() < 2) {
+            return 0;
+        }
+        List<int[]> sorted = new ArrayList<>(words);
+        sorted.sort((a, b) -> Integer.compare(a[0], b[0]));
+        int maxGap = 0;
+        for (int i = 1; i < sorted.size(); i++) {
+            int gap = sorted.get(i)[0] - sorted.get(i - 1)[1];
+            if (gap > maxGap) {
+                maxGap = gap;
+            }
+        }
+        return maxGap;
     }
 }
