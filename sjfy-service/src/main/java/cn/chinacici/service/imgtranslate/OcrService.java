@@ -107,6 +107,7 @@ public class OcrService {
         }
         Map<String, int[]> boxByKey = new LinkedHashMap<>();
         Map<String, StringBuilder> textByKey = new LinkedHashMap<>();
+        Map<String, double[]> confByKey = new LinkedHashMap<>();
 
         for (int i = 1; i < tsvLines.size(); i++) {
             String row = tsvLines.get(i);
@@ -129,6 +130,8 @@ public class OcrService {
                 int top = Integer.parseInt(cols[7].trim());
                 int width = Integer.parseInt(cols[8].trim());
                 int height = Integer.parseInt(cols[9].trim());
+                // 单词级别置信度（0~100），-1 表示 tesseract 没给出有效值，按 0 处理，避免拉高均值
+                double conf = Math.max(0d, Double.parseDouble(cols[10].trim()));
 
                 String key = blockNum + ":" + parNum + ":" + lineNum;
                 int[] box = boxByKey.get(key);
@@ -136,12 +139,16 @@ public class OcrService {
                     box = new int[]{left, top, left + width, top + height};
                     boxByKey.put(key, box);
                     textByKey.put(key, new StringBuilder(text));
+                    confByKey.put(key, new double[]{conf, 1});
                 } else {
                     box[0] = Math.min(box[0], left);
                     box[1] = Math.min(box[1], top);
                     box[2] = Math.max(box[2], left + width);
                     box[3] = Math.max(box[3], top + height);
                     textByKey.get(key).append(' ').append(text);
+                    double[] c = confByKey.get(key);
+                    c[0] += conf;
+                    c[1] += 1;
                 }
             } catch (NumberFormatException e) {
                 // 跳过解析异常的行
@@ -152,7 +159,9 @@ public class OcrService {
         for (Map.Entry<String, int[]> entry : boxByKey.entrySet()) {
             int[] box = entry.getValue();
             String text = textByKey.get(entry.getKey()).toString();
-            lines.add(new OcrLine(box[0], box[1], box[2], box[3], text));
+            double[] c = confByKey.get(entry.getKey());
+            double avgConf = c[1] > 0 ? c[0] / c[1] : 0;
+            lines.add(new OcrLine(box[0], box[1], box[2], box[3], text, avgConf));
         }
         lines.sort((a, b) -> {
             if (a.getY0() != b.getY0()) {

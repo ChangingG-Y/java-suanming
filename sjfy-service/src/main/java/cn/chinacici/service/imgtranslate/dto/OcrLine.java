@@ -7,13 +7,16 @@ public class OcrLine {
     private int x1;
     private int y1;
     private String text;
+    /** tesseract 识别置信度（0~100），取行内所有单词置信度的平均值。 */
+    private double confidence;
 
-    public OcrLine(int x0, int y0, int x1, int y1, String text) {
+    public OcrLine(int x0, int y0, int x1, int y1, String text, double confidence) {
         this.x0 = x0;
         this.y0 = y0;
         this.x1 = x1;
         this.y1 = y1;
         this.text = text;
+        this.confidence = confidence;
     }
 
     public int getX0() {
@@ -42,5 +45,9 @@ public class OcrLine {
 
     public String getText() {
         return text;
+    }
+
+    public double getConfidence() {
+        return confidence;
     }
 }

@@ -6,7 +6,11 @@ import cn.chinacici.service.imgtranslate.config.ImgTranslateProperties;
 import cn.chinacici.service.imgtranslate.dto.OcrLine;
 import org.springframework.stereotype.Service;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -68,12 +72,32 @@ public class ImageRedrawService {
             }
             g.dispose();
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            ImageIO.write(image, "jpg", out);
-            return out.toByteArray();
+            return encodeJpeg(image);
         } catch (IOException e) {
             throw new ServiceException(ResultCode.UNKNOWN_ERROR, "图片处理失败");
         }
+    }
+
+    /**
+     * Java 自带 JPEG 编码器在 {@link ImageIO#write} 不指定质量时，默认压缩质量大约只有 75%，
+     * 对表格里大片纯色底纹（灰色/白色斑马纹）压缩失真明显，肉眼可见色块、发花，
+     * 看起来像"底纹样式变了"。这里显式设成 95%，和 skill 版 Python 脚本
+     * (`im.save(..., quality=95)`) 保持一致。
+     */
+    private byte[] encodeJpeg(BufferedImage image) throws IOException {
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(0.95f);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(ios);
+            writer.write(null, new IIOImage(image, null, null), param);
+        } finally {
+            writer.dispose();
+        }
+        return out.toByteArray();
     }
 
     private void drawOne(Graphics2D g, BufferedImage image, OcrLine line, String translated) {

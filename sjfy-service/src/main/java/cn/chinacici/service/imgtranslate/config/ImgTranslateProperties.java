@@ -30,6 +30,15 @@ public class ImgTranslateProperties {
     private int connectTimeoutMs = 10000;
     /** DeepSeek 请求读取超时（毫秒），翻译整页文字可能要等久一点 */
     private int readTimeoutMs = 90000;
+    /**
+     * OCR 行平均置信度低于此值（0~100）时，判定为疑似噪声/无意义碎片，跳过翻译和重绘，
+     * 保留原图该处不动。常见于圆形徽标外圈弯曲装饰字被拆散识别出的片段。
+     */
+    private double minOcrConfidence = 55d;
+    /** 判定"短碎片"的字符数阈值（去掉标点空格后），短碎片需要更高置信度才采信 */
+    private int shortFragmentMaxLength = 3;
+    /** 短碎片专用的置信度门槛（通常比 minOcrConfidence 更高，因为短文本更容易是巧合识别出的噪声） */
+    private double shortFragmentMinConfidence = 75d;
 
     public String getTesseractPath() {
         return tesseractPath;
@@ -101,5 +110,29 @@ public class ImgTranslateProperties {
 
     public void setReadTimeoutMs(int readTimeoutMs) {
         this.readTimeoutMs = readTimeoutMs;
+    }
+
+    public double getMinOcrConfidence() {
+        return minOcrConfidence;
+    }
+
+    public void setMinOcrConfidence(double minOcrConfidence) {
+        this.minOcrConfidence = minOcrConfidence;
+    }
+
+    public int getShortFragmentMaxLength() {
+        return shortFragmentMaxLength;
+    }
+
+    public void setShortFragmentMaxLength(int shortFragmentMaxLength) {
+        this.shortFragmentMaxLength = shortFragmentMaxLength;
+    }
+
+    public double getShortFragmentMinConfidence() {
+        return shortFragmentMinConfidence;
+    }
+
+    public void setShortFragmentMinConfidence(double shortFragmentMinConfidence) {
+        this.shortFragmentMinConfidence = shortFragmentMinConfidence;
     }
 }

@@ -96,7 +96,32 @@ public class ImgTranslateService {
                 log.info("图片未识别到任何文字，原样返回，taskId={}", task.getId());
                 resultBytes = Files.readAllBytes(tempFile.toPath());
             } else {
-                List<String> translations = translateService.translate(lines, apiKey, model, instruction);
+                // 低置信度/疑似装饰性乱码的行（常见于圆形徽标外圈弯曲文字被拆散识别出的碎片）
+                // 直接跳过：不送去翻译、也不参与重绘擦除，原图这些地方保持不动。
+                // 之前把这类碎片也丢给大模型翻译，模型会对着乱码硬猜出新的乱码文字画上去。
+                List<OcrLine> toTranslate = new ArrayList<>();
+                List<Integer> toTranslateIdx = new ArrayList<>();
+                int skipped = 0;
+                for (int i = 0; i < lines.size(); i++) {
+                    OcrLine line = lines.get(i);
+                    if (isLikelyNoise(line)) {
+                        skipped++;
+                        continue;
+                    }
+                    toTranslate.add(line);
+                    toTranslateIdx.add(i);
+                }
+                if (skipped > 0) {
+                    log.info("跳过 {} 行低置信度/疑似装饰噪声文字，taskId={}", skipped, task.getId());
+                }
+
+                List<String> translations = new ArrayList<>(java.util.Collections.nCopies(lines.size(), null));
+                if (!toTranslate.isEmpty()) {
+                    List<String> partial = translateService.translate(toTranslate, apiKey, model, instruction);
+                    for (int i = 0; i < toTranslateIdx.size() && i < partial.size(); i++) {
+                        translations.set(toTranslateIdx.get(i), partial.get(i));
+                    }
+                }
                 resultBytes = redrawService.redraw(tempFile, lines, translations);
             }
             File resultFile = File.createTempFile("imgtranslate-out-", ".jpg");
@@ -111,6 +136,29 @@ public class ImgTranslateService {
             //noinspection ResultOfMethodCallIgnored
             tempFile.delete();
         }
+    }
+
+    /**
+     * 判断一行 OCR 文字是否疑似噪声（低置信度识别错误，或圆形徽标外圈弯曲装饰字被拆散
+     * 识别出的短碎片）。命中的行不送去翻译、也不参与擦除重绘，保留原图不动，
+     * 好过让大模型对着乱码硬猜出新的乱码画上去。
+     */
+    private boolean isLikelyNoise(OcrLine line) {
+        String text = line.getText() == null ? "" : line.getText().trim();
+        String compact = text.replaceAll("[^\\p{L}\\p{N}]", "");
+        if (compact.isEmpty()) {
+            return true;
+        }
+        if (line.getConfidence() < properties.getMinOcrConfidence()) {
+            return true;
+        }
+        // 短碎片（字母数字总数很少）即使过了普通置信度门槛，也更容易是巧合识别出的噪声，
+        // 需要更高的置信度才采信——这类多是徽标里被拆散的单个字母/短词。
+        if (compact.length() <= properties.getShortFragmentMaxLength()
+                && line.getConfidence() < properties.getShortFragmentMinConfidence()) {
+            return true;
+        }
+        return false;
     }
 
     public TranslateTask getTask(String taskId) {
