@@ -76,8 +76,12 @@ public class ImgTranslateController {
             throw new ServiceException(ResultCode.PARAMETER_ERROR, "任务还没完成，暂时无法下载");
         }
         byte[] bytes = Files.readAllBytes(task.getResultFile().toPath());
+        // 抹字重画的结果存的是无损 PNG，跳过重画（图片没识别到文字）时原样透传原图后缀，
+        // 按实际文件后缀给 Content-Type，不能不管三七二十一都当 jpeg。
+        MediaType mediaType = task.getResultFile().getName().toLowerCase().endsWith(".png")
+                ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG;
         return ResponseEntity.ok()
-                .contentType(MediaType.IMAGE_JPEG)
+                .contentType(mediaType)
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .body(bytes);
     }

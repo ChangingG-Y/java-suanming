@@ -15,6 +15,8 @@ import javax.annotation.PreDestroy;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -92,6 +94,9 @@ public class ImgTranslateService {
         try {
             List<OcrLine> lines = ocrService.extractLines(tempFile);
             byte[] resultBytes;
+            // 抹字重画的结果一律存 PNG（无损），跳过重画的原图直传分支保留原后缀，
+            // 下面按实际写入的文件后缀决定 resultSuffix，下载接口据此设置正确的 Content-Type。
+            String resultSuffix = ".jpg";
             if (lines.isEmpty()) {
                 log.info("图片未识别到任何文字，原样返回，taskId={}", task.getId());
                 resultBytes = Files.readAllBytes(tempFile.toPath());
@@ -115,7 +120,7 @@ public class ImgTranslateService {
                     log.info("跳过 {} 行低置信度/疑似装饰噪声文字，taskId={}", skipped, task.getId());
                 }
 
-                List<String> translations = new ArrayList<>(java.util.Collections.nCopies(lines.size(), null));
+                List<String> translations = new ArrayList<>(Collections.nCopies(lines.size(), null));
                 if (!toTranslate.isEmpty()) {
                     List<String> partial = translateService.translate(toTranslate, apiKey, model, instruction);
                     for (int i = 0; i < toTranslateIdx.size() && i < partial.size(); i++) {
@@ -123,8 +128,9 @@ public class ImgTranslateService {
                     }
                 }
                 resultBytes = redrawService.redraw(tempFile, lines, translations);
+                resultSuffix = ".png";
             }
-            File resultFile = File.createTempFile("imgtranslate-out-", ".jpg");
+            File resultFile = File.createTempFile("imgtranslate-out-", resultSuffix);
             Files.write(resultFile.toPath(), resultBytes);
             task.markDone(resultFile);
         } catch (ServiceException e) {
