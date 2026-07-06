@@ -226,9 +226,17 @@ public class ImgTranslateService {
         }
         // 短碎片（字母数字总数很少）即使过了普通置信度门槛，也更容易是巧合识别出的噪声，
         // 需要更高的置信度才采信——这类多是徽标里被拆散的单个字母/短词。
-        if (compact.length() <= properties.getShortFragmentMaxLength()
-                && line.getConfidence() < properties.getShortFragmentMinConfidence()) {
-            return true;
+        if (compact.length() <= properties.getShortFragmentMaxLength()) {
+            if (line.getConfidence() < properties.getShortFragmentMinConfidence()) {
+                return true;
+            }
+            // 单独置信度过关也不够：徽标外圈弯曲装饰字有时会被 tesseract 纵向拉长识别成
+            // 一两个字符、但置信度恰好够高的碎片（实测案例：字符"y"，置信度79，行高却
+            // 高达106px，远超同页正常短文本的20来px）。短碎片配上异常大的行高，基本可以
+            // 确定是这类伪影，一并按噪声跳过。
+            if (line.height() > properties.getShortFragmentMaxHeight()) {
+                return true;
+            }
         }
         return false;
     }

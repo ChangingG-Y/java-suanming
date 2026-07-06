@@ -40,6 +40,14 @@ public class ImgTranslateProperties {
     /** 短碎片专用的置信度门槛（通常比 minOcrConfidence 更高，因为短文本更容易是巧合识别出的噪声） */
     private double shortFragmentMinConfidence = 75d;
     /**
+     * 短碎片（字符数 <= shortFragmentMaxLength）专用的行高异常门槛（像素）。正常一两个字符的
+     * 行高应该跟同页其它短文本差不多；如果一个一两个字符的碎片框高度远超正常水平，大概率是
+     * 圆形徽标外圈弯曲装饰字被 tesseract 纵向拉长识别出的伪影（实测：单字符"y"置信度 79，
+     * 刚好卡过 shortFragmentMinConfidence 的门槛，但行高 106px 远超同排"General"/"purpose"
+     * 的 22px，就是这类漏网之鱼），命中也按噪声跳过。
+     */
+    private int shortFragmentMaxHeight = 70;
+    /**
      * 行内相邻单词最大间隙 / 行高 的倍数门槛。正常同一格/同一句内的词间距远小于字高，
      * 超过这个倍数，大概率是 tesseract 把不同表格列/单元格的文字错误合并成了一行，
      * 命中就跳过翻译和重画，保留原图不动，避免把跨列拼接出的错误内容画上去。
@@ -140,6 +148,14 @@ public class ImgTranslateProperties {
 
     public void setShortFragmentMinConfidence(double shortFragmentMinConfidence) {
         this.shortFragmentMinConfidence = shortFragmentMinConfidence;
+    }
+
+    public int getShortFragmentMaxHeight() {
+        return shortFragmentMaxHeight;
+    }
+
+    public void setShortFragmentMaxHeight(int shortFragmentMaxHeight) {
+        this.shortFragmentMaxHeight = shortFragmentMaxHeight;
     }
 
     public double getMaxWordGapToHeightRatio() {
