@@ -4,6 +4,7 @@ import cn.chinacici.core.ResultCode;
 import cn.chinacici.exception.ServiceException;
 import cn.chinacici.service.imgtranslate.config.ImgTranslateProperties;
 import cn.chinacici.service.imgtranslate.dto.OcrLine;
+import cn.chinacici.service.imgtranslate.dto.PreviewLine;
 import cn.chinacici.service.imgtranslate.dto.TranslateTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,11 +27,16 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 图片文字翻译总编排：OCR -&gt; DeepSeek 翻译 -&gt; 抹字重画。
+ * 图片文字翻译总编排：OCR -&gt; DeepSeek 翻译 -&gt; 人工复核确认 -&gt; 抹字重画。
  *
  * <p>整个流程可能要几十秒，同步跑在一次 HTTP 请求里很容易被 Nginx/浏览器判定超时（504）。
- * 所以这里改成异步任务模式：提交后立刻返回 taskId，前端轮询状态，完成后单独走下载接口，
- * 下载完再调用删除接口清理服务器上的临时文件——跟 order/file 那套下载接口是同一个思路。</p>
+ * 所以这里改成异步任务模式：提交后立刻返回 taskId，前端轮询状态。</p>
+ *
+ * <p>OCR + AI 翻译再准，也难免有翻错、翻漏、位置识别错位这些问题（人眼一眼能看出来，
+ * 模型和几何规则不一定能防住），所以不再是"翻完直接烧进图里"：OCR+翻译跑完先进入
+ * {@code REVIEW} 状态，把建议译文和坐标交给前端给用户看一遍、改一改，用户确认后才真正
+ * 擦字重画，转 {@code DONE}，再走下载接口，下载完调用删除接口清理服务器上的临时文件——
+ * 跟 order/file 那套下载接口是同一个思路。</p>
  */
 @Service
 public class ImgTranslateService {
@@ -86,61 +92,121 @@ public class ImgTranslateService {
         TranslateTask task = new TranslateTask(taskId);
         tasks.put(taskId, task);
 
-        workerPool.submit(() -> runTranslate(task, tempFile, apiKey, model, instruction));
+        workerPool.submit(() -> runOcrAndTranslate(task, tempFile, apiKey, model, instruction));
         return taskId;
     }
 
-    private void runTranslate(TranslateTask task, File tempFile, String apiKey, String model, String instruction) {
+    /** 第一阶段：OCR + AI 翻译，跑完进入 REVIEW 状态等用户确认；没识别到文字就直接原样返回，没什么可复核的。 */
+    private void runOcrAndTranslate(TranslateTask task, File tempFile, String apiKey, String model, String instruction) {
         try {
             List<OcrLine> lines = ocrService.extractLines(tempFile);
-            byte[] resultBytes;
-            // 抹字重画的结果一律存 PNG（无损），跳过重画的原图直传分支保留原后缀，
-            // 下面按实际写入的文件后缀决定 resultSuffix，下载接口据此设置正确的 Content-Type。
-            String resultSuffix = ".jpg";
             if (lines.isEmpty()) {
                 log.info("图片未识别到任何文字，原样返回，taskId={}", task.getId());
-                resultBytes = Files.readAllBytes(tempFile.toPath());
-            } else {
-                // 低置信度/疑似装饰性乱码的行（常见于圆形徽标外圈弯曲文字被拆散识别出的碎片）
-                // 直接跳过：不送去翻译、也不参与重绘擦除，原图这些地方保持不动。
-                // 之前把这类碎片也丢给大模型翻译，模型会对着乱码硬猜出新的乱码文字画上去。
-                List<OcrLine> toTranslate = new ArrayList<>();
-                List<Integer> toTranslateIdx = new ArrayList<>();
-                int skipped = 0;
-                for (int i = 0; i < lines.size(); i++) {
-                    OcrLine line = lines.get(i);
-                    if (isLikelyNoise(line) || isLikelySplicedCells(line)) {
-                        skipped++;
-                        continue;
-                    }
-                    toTranslate.add(line);
-                    toTranslateIdx.add(i);
-                }
-                if (skipped > 0) {
-                    log.info("跳过 {} 行低置信度/疑似装饰噪声文字，taskId={}", skipped, task.getId());
-                }
-
-                List<String> translations = new ArrayList<>(Collections.nCopies(lines.size(), null));
-                if (!toTranslate.isEmpty()) {
-                    List<String> partial = translateService.translate(toTranslate, apiKey, model, instruction);
-                    for (int i = 0; i < toTranslateIdx.size() && i < partial.size(); i++) {
-                        translations.set(toTranslateIdx.get(i), partial.get(i));
-                    }
-                }
-                resultBytes = redrawService.redraw(tempFile, lines, translations);
-                resultSuffix = ".png";
+                byte[] resultBytes = Files.readAllBytes(tempFile.toPath());
+                File resultFile = File.createTempFile("imgtranslate-out-", ".jpg");
+                Files.write(resultFile.toPath(), resultBytes);
+                task.markDone(resultFile);
+                //noinspection ResultOfMethodCallIgnored
+                tempFile.delete();
+                return;
             }
-            File resultFile = File.createTempFile("imgtranslate-out-", resultSuffix);
+
+            // 低置信度/疑似装饰性乱码的行（常见于圆形徽标外圈弯曲文字被拆散识别出的碎片），
+            // 以及疑似跨表格列/单元格拼接错行的行，直接跳过：不送去翻译，原图这些地方保持不动。
+            List<OcrLine> toTranslate = new ArrayList<>();
+            List<Integer> toTranslateIdx = new ArrayList<>();
+            int skipped = 0;
+            for (int i = 0; i < lines.size(); i++) {
+                OcrLine line = lines.get(i);
+                if (isLikelyNoise(line) || isLikelySplicedCells(line)) {
+                    skipped++;
+                    continue;
+                }
+                toTranslate.add(line);
+                toTranslateIdx.add(i);
+            }
+            if (skipped > 0) {
+                log.info("跳过 {} 行低置信度/疑似装饰噪声文字，taskId={}", skipped, task.getId());
+            }
+
+            List<String> translations = new ArrayList<>(Collections.nCopies(lines.size(), null));
+            if (!toTranslate.isEmpty()) {
+                List<String> partial = translateService.translate(toTranslate, apiKey, model, instruction);
+                for (int i = 0; i < toTranslateIdx.size() && i < partial.size(); i++) {
+                    translations.set(toTranslateIdx.get(i), partial.get(i));
+                }
+            }
+            // 注意：这里不删 tempFile，复核确认阶段还要用它读原图做预览和最终重画。
+            task.markAwaitingReview(tempFile, lines, translations);
+        } catch (ServiceException e) {
+            task.markError(e.getMsg());
+            //noinspection ResultOfMethodCallIgnored
+            tempFile.delete();
+        } catch (Exception e) {
+            log.error("图片翻译任务失败，taskId={}", task.getId(), e);
+            task.markError("翻译失败，请稍后重试");
+            //noinspection ResultOfMethodCallIgnored
+            tempFile.delete();
+        }
+    }
+
+    /** 复核阶段给前端看的数据：每行的坐标 + OCR 原文 + AI 建议译文（null 表示建议保留原图不动）。 */
+    public List<PreviewLine> getPreview(String taskId) {
+        TranslateTask task = getTask(taskId);
+        if (task.getStatus() != TranslateTask.Status.REVIEW) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "任务当前不在待确认状态");
+        }
+        List<OcrLine> lines = task.getLines();
+        List<String> translations = task.getTranslations();
+        List<PreviewLine> result = new ArrayList<>(lines.size());
+        for (int i = 0; i < lines.size(); i++) {
+            OcrLine line = lines.get(i);
+            result.add(new PreviewLine(i, line.getX0(), line.getY0(), line.getX1(), line.getY1(),
+                    line.getText(), translations.get(i)));
+        }
+        return result;
+    }
+
+    /** 复核阶段展示给用户看的原图（还没擦字重画过）。 */
+    public File getSourceFileForPreview(String taskId) {
+        TranslateTask task = getTask(taskId);
+        if (task.getStatus() != TranslateTask.Status.REVIEW || task.getSourceFile() == null) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "当前没有可预览的原图");
+        }
+        return task.getSourceFile();
+    }
+
+    /** 用户确认（可能改过部分译文）后，异步做最终擦字重画。 */
+    public void confirmAndRender(String taskId, List<String> editedTranslations) {
+        TranslateTask task = getTask(taskId);
+        if (task.getStatus() != TranslateTask.Status.REVIEW) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "任务当前不在待确认状态");
+        }
+        List<OcrLine> lines = task.getLines();
+        if (editedTranslations == null || editedTranslations.size() != lines.size()) {
+            throw new ServiceException(ResultCode.PARAMETER_ERROR, "提交的译文条数和原文行数不一致");
+        }
+        task.markRendering();
+        workerPool.submit(() -> doRender(task, editedTranslations));
+    }
+
+    private void doRender(TranslateTask task, List<String> translations) {
+        File sourceFile = task.getSourceFile();
+        try {
+            byte[] resultBytes = redrawService.redraw(sourceFile, task.getLines(), translations);
+            File resultFile = File.createTempFile("imgtranslate-out-", ".png");
             Files.write(resultFile.toPath(), resultBytes);
             task.markDone(resultFile);
         } catch (ServiceException e) {
             task.markError(e.getMsg());
         } catch (Exception e) {
-            log.error("图片翻译任务失败，taskId={}", task.getId(), e);
-            task.markError("翻译失败，请稍后重试");
+            log.error("图片重画失败，taskId={}", task.getId(), e);
+            task.markError("生成失败，请稍后重试");
         } finally {
-            //noinspection ResultOfMethodCallIgnored
-            tempFile.delete();
+            if (sourceFile != null) {
+                //noinspection ResultOfMethodCallIgnored
+                sourceFile.delete();
+            }
         }
     }
 
@@ -192,10 +258,7 @@ public class ImgTranslateService {
     /** 前端下载完成后调用，清理服务器上的临时结果文件。 */
     public void deleteTask(String taskId) {
         TranslateTask task = tasks.remove(taskId);
-        if (task != null && task.getResultFile() != null) {
-            //noinspection ResultOfMethodCallIgnored
-            task.getResultFile().delete();
-        }
+        deleteTaskFiles(task);
     }
 
     private void cleanupStaleTasks() {
@@ -203,12 +266,26 @@ public class ImgTranslateService {
         tasks.entrySet().removeIf(entry -> {
             TranslateTask task = entry.getValue();
             boolean stale = now - task.getCreatedAt() > TASK_TTL_MS;
-            if (stale && task.getResultFile() != null) {
-                //noinspection ResultOfMethodCallIgnored
-                task.getResultFile().delete();
+            if (stale) {
+                deleteTaskFiles(task);
             }
             return stale;
         });
+    }
+
+    /** 结果文件、以及复核阶段一直留着没删的原图临时文件，一并清理。 */
+    private void deleteTaskFiles(TranslateTask task) {
+        if (task == null) {
+            return;
+        }
+        if (task.getResultFile() != null) {
+            //noinspection ResultOfMethodCallIgnored
+            task.getResultFile().delete();
+        }
+        if (task.getSourceFile() != null) {
+            //noinspection ResultOfMethodCallIgnored
+            task.getSourceFile().delete();
+        }
     }
 
     @PreDestroy
