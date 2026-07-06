@@ -34,7 +34,7 @@ public class ImageRedrawService {
     private static final int ANOMALY_HEIGHT_CAP = 48;
     private static final int PAD_X = 6;
     private static final int PAD_Y = 4;
-    /** 单行最小可读字号；低于这个大小就宁可换成两行，也不要把字缩到看不清。 */
+    /** 两行换行方案的起始试探字号（单行缩到 9px 都放不下才会用到这个分支，见 fitLayout）。 */
     private static final int MIN_SINGLE_LINE_SIZE = 14;
     /**
      * 换成两行时，允许擦除+绘制区域比原框高出的倍数上限。人工改的译文/AI 补充翻译的译文
@@ -155,8 +155,12 @@ public class ImageRedrawService {
     }
 
     private TextLayout fitLayout(Graphics2D g, String text, int maxW, int maxH) {
-        // 1) 优先单行，字号不低于 MIN_SINGLE_LINE_SIZE，保证可读
-        for (int size = Math.max(MIN_SINGLE_LINE_SIZE, (int) (maxH * 0.95)); size >= MIN_SINGLE_LINE_SIZE; size--) {
+        // 1) 单行优先，一路缩到 9px——这是原来就验证过、绝大多数正常表格内容（尤其密集
+        // 多列表格里的窄列）都走这条路径，效果一直是好的。换行只应该是这条路径彻底失败
+        // 之后的兜底方案，不能因为想支持换行就提前在 14px 截断，把本来缩到 10~13px 就能
+        // 放下的正常内容也挤去换行、白白扩大擦除区域侵占相邻行（上线后图4、图5验证过
+        // 提前截断确实会让这类内容变差，这里改回和原版一致的下限）。
+        for (int size = Math.max(10, (int) (maxH * 0.95)); size > 8; size--) {
             Font font = loadBaseFont().deriveFont((float) size);
             FontMetrics fm = g.getFontMetrics(font);
             int w = fm.stringWidth(text);
@@ -166,7 +170,8 @@ public class ImageRedrawService {
             }
         }
 
-        // 2) 单行在可读字号内放不下，尝试换成两行，允许擦除/绘制区域适度增高
+        // 2) 单行缩到 9px 都放不下，说明文字长度和框已经明显不匹配（通常是人工改的
+        // 译文/AI 补充翻译偏长），这时候才值得尝试换成两行，允许擦除/绘制区域适度增高
         int maxHFor2Lines = (int) (maxH * MAX_HEIGHT_GROWTH_RATIO);
         for (int size = Math.max(MIN_SINGLE_LINE_SIZE, (int) (maxH * 0.85)); size >= 10; size--) {
             Font font = loadBaseFont().deriveFont((float) size);
